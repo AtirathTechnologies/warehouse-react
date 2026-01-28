@@ -373,7 +373,7 @@ const Products = () => {
     const list = limit ? allCategories.slice(0, 3) : allCategories;
     
     return (
-      <div className={`space-y-4 ${!limit ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : ''}`}>
+      <div className={`space-y-4 ${!limit ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : ''}`}>
         {list.map(category => {
           // Count products in this category
           const productCount = allProducts.filter(p => p.category === category.name).length;
@@ -423,7 +423,7 @@ const Products = () => {
     const list = limit ? allBrands.slice(0, 4) : allBrands;
     
     return (
-      <div className={`space-y-4 ${!limit ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}`}>
+      <div className={`space-y-4 ${!limit ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : ''}`}>
         {list.map(brand => {
           // Count products in this brand
           const productCount = allProducts.filter(p => p.brand === brand.name).length;
@@ -468,19 +468,65 @@ const Products = () => {
   if (categoryView === 'all') {
     return (
       <div className="mb-10">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">All Categories</h1>
-          <button
-            onClick={() => setCategoryView('preview')}
-            className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
-          >
-            <span>←</span> Back to Products
-          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">All Categories</h1>
+            <p className="text-gray-600 mt-2">Manage product categories in your inventory</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => openEntityModal('category')}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              + Add New Category
+            </button>
+            <button
+              onClick={() => setCategoryView('preview')}
+              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
+            >
+              ← Back to Products
+            </button>
+          </div>
         </div>
 
+        {/* Categories Grid */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {renderCategoriesList(false)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {allCategories.map(category => {
+              // Count products in this category
+              const productCount = allProducts.filter(p => p.category === category.name).length;
+              
+              return (
+                <div key={category.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800">{category.name}</h3>
+                      <p className="text-gray-600 mt-2">{productCount} product{productCount !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEntityModal('category', category)}
+                        className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded hover:bg-blue-50 text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => openDeleteModal('category', category.id, category.name)}
+                        className="text-red-600 hover:text-red-800 px-3 py-1 rounded hover:bg-red-50 text-sm font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  {productCount === 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <p className="text-gray-500 text-sm">No products in this category</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -586,19 +632,65 @@ const Products = () => {
   if (brandView === 'all') {
     return (
       <div className="mb-10">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">All Brands</h1>
-          <button
-            onClick={() => setBrandView('preview')}
-            className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
-          >
-            <span>←</span> Back to Products
-          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">All Brands</h1>
+            <p className="text-gray-600 mt-2">Manage product brands in your inventory</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => openEntityModal('brand')}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              + Add New Brand
+            </button>
+            <button
+              onClick={() => setBrandView('preview')}
+              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
+            >
+              ← Back to Products
+            </button>
+          </div>
         </div>
 
+        {/* Brands Grid */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {renderBrandsList(false)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {allBrands.map(brand => {
+              // Count products in this brand
+              const productCount = allProducts.filter(p => p.brand === brand.name).length;
+              
+              return (
+                <div key={brand.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800">{brand.name}</h3>
+                      <p className="text-gray-600 mt-2">{productCount} product{productCount !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEntityModal('brand', brand)}
+                        className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded hover:bg-blue-50 text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => openDeleteModal('brand', brand.id, brand.name)}
+                        className="text-red-600 hover:text-red-800 px-3 py-1 rounded hover:bg-red-50 text-sm font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  {productCount === 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <p className="text-gray-500 text-sm">No products in this brand</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
