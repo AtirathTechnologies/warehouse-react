@@ -41,11 +41,7 @@ export default function StockOut() {
     quantity: "",
     unit: "",
     reason: "",
-    invoice: "",
-    batch: "",
-    zone: "",
-    rack: "",
-    bin: "",
+    reference: "",
     remarks: ""
   });
 
@@ -67,7 +63,7 @@ export default function StockOut() {
       )
     );
 
-    const unsubStockOut = onSnapshot(
+    const unsubStock = onSnapshot(
       query(collection(db, "stock_out"), orderBy("createdAt", "desc")),
       snap =>
         setStockOut(
@@ -82,7 +78,7 @@ export default function StockOut() {
     return () => {
       unsubProducts();
       unsubWarehouses();
-      unsubStockOut();
+      unsubStock();
     };
   }, []);
 
@@ -118,7 +114,7 @@ export default function StockOut() {
 
     if (search) {
       data = data.filter(d =>
-        [d.productName, d.sku, d.reason, d.invoice, d.batch]
+        [d.productName, d.sku, d.reference, d.reason]
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase())
@@ -142,7 +138,7 @@ export default function StockOut() {
      SAVE STOCK OUT
   ================================ */
   const saveStockOut = async () => {
-    if (!form.productId || !form.warehouse || !form.quantity || !form.reason || !form.invoice) {
+    if (!form.productId || !form.warehouse || !form.quantity || !form.reason) {
       alert("Please fill all required fields");
       return;
     }
@@ -151,34 +147,45 @@ export default function StockOut() {
       setSaving(true);
 
       const product = products.find(p => p.id === form.productId);
-      const location = `${form.zone || 'Zone'} - ${form.rack || 'Rack'} - ${form.bin || 'Bin'}`;
-
-      const inventoryRef = doc(db, "inventory", `${product.sku}_${form.warehouse}`);
-      const invSnap = await getDoc(inventoryRef);
-
-      if (!invSnap.exists() || invSnap.data().quantity < Number(form.quantity)) {
-        alert("Insufficient stock available");
+      
+      // Check inventory availability
+      const inventoryId = `${product.sku}_${form.warehouse}`;
+      const inventoryRef = doc(db, "inventory", inventoryId);
+      const inventorySnap = await getDoc(inventoryRef);
+      
+      if (!inventorySnap.exists()) {
+        alert("Product not available in selected warehouse");
+        setSaving(false);
+        return;
+      }
+      
+      const currentQty = inventorySnap.data().quantity;
+      const requestedQty = Number(form.quantity);
+      
+      if (currentQty < requestedQty) {
+        alert(`Insufficient stock. Available: ${currentQty} ${form.unit}`);
+        setSaving(false);
         return;
       }
 
+      // Save stock out record
       await addDoc(collection(db, "stock_out"), {
         productId: product.id,
         productName: product.name,
         sku: product.sku,
         category: product.category,
         warehouse: form.warehouse,
-        quantity: Number(form.quantity),
+        quantity: requestedQty,
         unit: form.unit,
         reason: form.reason,
-        invoice: form.invoice,
-        batch: form.batch || `BATCH-${Date.now().toString().slice(-6)}`,
-        location,
+        reference: form.reference,
         remarks: form.remarks,
         createdAt: new Date()
       });
 
+      // Update inventory
       await updateDoc(inventoryRef, {
-        quantity: invSnap.data().quantity - Number(form.quantity),
+        quantity: currentQty - requestedQty,
         updatedAt: new Date()
       });
 
@@ -186,7 +193,7 @@ export default function StockOut() {
       setForm({});
       alert("Stock Out saved!");
     } catch {
-      alert("Failed to process Stock Out");
+      alert("Failed to save Stock Out");
     } finally {
       setSaving(false);
     }
@@ -200,29 +207,42 @@ export default function StockOut() {
       {/* HEADER */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800">Stock Out</h1>
-        <p className="text-gray-600 mt-1">Track outgoing inventory for sales, damage, or transfers</p>
+        <p className="text-gray-600 mt-1">Track outgoing inventory and issues</p>
       </div>
 
-      {/* TOOLBAR */}
+      {/* FIXED TOOLBAR - StockOut Version */}
       <div className="bg-white p-4 rounded-lg shadow-sm border">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+
+          {/* SEARCH */}
           <div className="flex-1">
             <div className="relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
               <input
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="w-full pl-10 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Search products, SKU, reason..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
           </div>
-          
-          <div className="flex gap-3">
-            <select 
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[140px]"
+
+          {/* ACTIONS */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3 lg:flex-nowrap">
+            <select
+              className="w-full sm:w-auto px-4 py-2.5 border rounded-lg bg-white"
               value={category}
               onChange={e => setCategory(e.target.value)}
             >
@@ -232,17 +252,17 @@ export default function StockOut() {
               ))}
             </select>
 
-            <button className="px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+            <button className="w-full sm:w-auto px-4 py-2.5 border rounded-lg hover:bg-gray-50">
               Filter
             </button>
-            
-            <button className="px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+
+            <button className="w-full sm:w-auto px-4 py-2.5 border rounded-lg hover:bg-gray-50">
               Export
             </button>
-            
-            <button 
+
+            <button
               onClick={() => setShowModal(true)}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm hover:shadow-md flex items-center gap-2"
+              className="col-span-2 sm:col-span-1 w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -267,7 +287,7 @@ export default function StockOut() {
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">QUANTITY</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">UNIT</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">REASON</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">LOCATION</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">REFERENCE</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">DETAILS</th>
                 </tr>
               </thead>
@@ -294,20 +314,11 @@ export default function StockOut() {
                         <td className="px-5 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">{s.unit}</div>
                         </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                            s.reason === 'Sales' ? 'bg-green-100 text-green-800' :
-                            s.reason === 'Damage' ? 'bg-red-100 text-red-800' :
-                            s.reason === 'Expiry' ? 'bg-yellow-100 text-yellow-800' :
-                            s.reason === 'Internal Use' ? 'bg-blue-100 text-blue-800' :
-                            s.reason === 'Transfer' ? 'bg-purple-100 text-purple-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {s.reason}
-                          </span>
+                        <td className="px-5 py-4">
+                          <div className="text-sm text-gray-900">{s.reason}</div>
                         </td>
                         <td className="px-5 py-4">
-                          <div className="text-sm text-gray-900">{s.location || 'Not specified'}</div>
+                          <div className="text-sm text-gray-900">{s.reference || 'N/A'}</div>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <button
@@ -334,33 +345,37 @@ export default function StockOut() {
                             <div className="bg-white p-5 rounded-lg border border-gray-200">
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div>
-                                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Details</h4>
+                                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Product Details</h4>
                                   <div className="space-y-2">
                                     <div>
                                       <span className="text-xs text-gray-500">Category:</span>
                                       <p className="text-sm font-medium text-gray-900">{s.category}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs text-gray-500">Invoice:</span>
-                                      <p className="text-sm font-medium text-gray-900">{s.invoice}</p>
+                                      <span className="text-xs text-gray-500">SKU:</span>
+                                      <p className="text-sm font-medium text-gray-900">{s.sku}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs text-gray-500">Batch:</span>
-                                      <p className="text-sm font-medium text-gray-900">{s.batch || 'N/A'}</p>
+                                      <span className="text-xs text-gray-500">Unit:</span>
+                                      <p className="text-sm font-medium text-gray-900">{s.unit}</p>
                                     </div>
                                   </div>
                                 </div>
                                 
                                 <div>
-                                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Warehouse Info</h4>
+                                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Transaction Info</h4>
                                   <div className="space-y-2">
                                     <div>
                                       <span className="text-xs text-gray-500">Warehouse:</span>
                                       <p className="text-sm font-medium text-gray-900">{s.warehouse}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs text-gray-500">Location:</span>
-                                      <p className="text-sm font-medium text-gray-900">{s.location || 'Not specified'}</p>
+                                      <span className="text-xs text-gray-500">Reason:</span>
+                                      <p className="text-sm font-medium text-gray-900">{s.reason}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-xs text-gray-500">Reference:</span>
+                                      <p className="text-sm font-medium text-gray-900">{s.reference || 'N/A'}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -459,7 +474,7 @@ export default function StockOut() {
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-6 pt-5 pb-6 sm:p-8">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-semibold text-gray-900">Remove Stock</h3>
+                  <h3 className="text-xl font-semibold text-gray-900">Stock Out</h3>
                   <button
                     onClick={() => setShowModal(false)}
                     className="text-gray-400 hover:text-gray-500 p-1 rounded-full hover:bg-gray-100"
@@ -546,67 +561,23 @@ export default function StockOut() {
                         required
                       >
                         <option value="">Select Reason</option>
-                        <option value="Sales">Sales</option>
-                        <option value="Damage">Damage</option>
-                        <option value="Expiry">Expiry</option>
-                        <option value="Internal Use">Internal Use</option>
-                        <option value="Transfer">Transfer</option>
+                        <option value="Sales Order">Sales Order</option>
+                        <option value="Internal Transfer">Internal Transfer</option>
+                        <option value="Damaged">Damaged</option>
+                        <option value="Expired">Expired</option>
                         <option value="Sample">Sample</option>
+                        <option value="Other">Other</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reference Number</label>
                       <input
                         className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., OUT-1092"
-                        value={form.invoice}
-                        onChange={e => setForm({ ...form, invoice: e.target.value })}
-                        required
+                        placeholder="e.g., SO-5001, TRF-001"
+                        value={form.reference}
+                        onChange={e => setForm({ ...form, reference: e.target.value })}
                       />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Batch Number</label>
-                      <input
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., BATCH-031"
-                        value={form.batch}
-                        onChange={e => setForm({ ...form, batch: e.target.value })}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Zone</label>
-                      <input
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Zone C"
-                        value={form.zone}
-                        onChange={e => setForm({ ...form, zone: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
-                        <input
-                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Rack 4"
-                          value={form.rack}
-                          onChange={e => setForm({ ...form, rack: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Bin</label>
-                        <input
-                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Bin 1"
-                          value={form.bin}
-                          onChange={e => setForm({ ...form, bin: e.target.value })}
-                        />
-                      </div>
                     </div>
                   </div>
 

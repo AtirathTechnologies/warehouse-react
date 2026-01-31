@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 
@@ -134,7 +134,7 @@ const warehouseData = {
 /* ===============================
    HELPER COMPONENTS
 ================================ */
-function StatCard({ title, value, change, color, icon, isNavigable = false, onClick }) {
+function StatCard({ title, value, change, color, icon, onClick }) {
   return (
     <div
       className="stat-card bg-white rounded-lg md:rounded-xl shadow-sm md:shadow-md p-3 md:p-4 lg:p-6 border-l-3 md:border-l-4 cursor-pointer clickable hover:shadow-md md:hover:shadow-lg transition-shadow duration-200"
@@ -211,17 +211,67 @@ function ActivityItem({ title, description, time, bgClass, icon, onClick }) {
 }
 
 function StockMovementBarChart({ data, period, onHover, onLeave, warehouseName }) {
-  const width = 320;
-  const height = 160;
+  const containerRef = useRef(null);
+  const [dimensions, setDimensions] = useState({
+    width: 0,
+    height: 0,
+  });
+
+  // Use ResizeObserver to track container size - FIXED INITIALIZATION
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+
+    const measure = () => {
+      const rect = containerRef.current.getBoundingClientRect();
+      const width = rect.width || 0;
+
+      const height = Math.max(
+        window.innerWidth < 640 ? 220 : 260,
+        Math.min(width * 0.6, 380)
+      );
+
+      setDimensions({ width, height });
+    };
+
+    // Measure immediately
+    measure();
+
+    const observer = new ResizeObserver(() => {
+      measure();
+    });
+
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Use a simple fallback during initial render
+  const width = dimensions.width || 300;
+  const height = dimensions.height || 260;
+  
   const padding = { top: 10, right: 30, bottom: 30, left: 30 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
   const maxValue = Math.max(...data.inward, ...data.outward, ...data.net);
-  const barWidth = Math.min(15, chartWidth / (data.labels.length * 3));
-  const barSpacing = 2;
+  
+  // Calculate responsive bar width
+  const minBarWidth = 8;
+  const maxBarWidth = 20;
+  const availableWidth = chartWidth / (data.labels.length);
+  const calculatedBarWidth = availableWidth / 4; // 1/4 of available space for bars, rest for spacing
+  
+  const barWidth = Math.max(
+    minBarWidth,
+    Math.min(maxBarWidth, calculatedBarWidth)
+  );
+  const barSpacing = barWidth * 0.2; // 20% of bar width as spacing
 
-  const scaleX = (i) => padding.left + (i * chartWidth) / (data.labels.length - 1);
+  // Industry-standard centering for X-scale
+  const scaleX = (i) =>
+    padding.left +
+    ((i + 0.5) * chartWidth) / data.labels.length;
+  
   const scaleY = (v) => padding.top + chartHeight - (v / maxValue) * chartHeight;
 
   // Format Y-axis labels
@@ -246,7 +296,12 @@ function StockMovementBarChart({ data, period, onHover, onLeave, warehouseName }
   }
 
   return (
-    <div className="h-48 md:h-56 lg:h-64 relative" id="stockMovementChart">
+    <div
+      ref={containerRef}
+      className="relative w-full min-h-[220px]"
+      id="stockMovementChart"
+      style={{ height }}
+    >
       <div className="absolute left-0 top-0 bottom-8 md:bottom-10 w-8 md:w-10 flex flex-col justify-between">
         {yAxisLabels}
       </div>
@@ -331,13 +386,13 @@ function StockMovementBarChart({ data, period, onHover, onLeave, warehouseName }
           {data.labels.map((label, index) => {
             const x = (index * chartWidth) / (data.labels.length - 1);
             const left = (x / chartWidth) * 100 + "%";
-            const width = ((chartWidth / (data.labels.length - 1)) / chartWidth) * 100 + "%";
+            const widthPercentage = ((chartWidth / (data.labels.length - 1)) / chartWidth) * 100 + "%";
 
             return (
               <div
                 key={index}
                 className="absolute top-0 bottom-8 md:bottom-10"
-                style={{ left, width }}
+                style={{ left, width: widthPercentage }}
                 data-index={index}
                 data-label={label}
                 data-inward={data.inward[index]}
@@ -388,13 +443,7 @@ function StockMovementBarChart({ data, period, onHover, onLeave, warehouseName }
 
       {/* Chart subtitle */}
       <div className="absolute bottom-10 md:bottom-12 left-8 md:left-10 right-0 flex justify-center">
-        <div className="text-xs text-gray-500 text-center px-2">
-          {period === "week"
-            ? "Daily stock movements"
-            : period === "month"
-            ? "Weekly cumulative totals"
-            : "Quarterly aggregated data"}
-        </div>
+        
       </div>
     </div>
   );
@@ -402,16 +451,14 @@ function StockMovementBarChart({ data, period, onHover, onLeave, warehouseName }
 
 function CategoryPieChart({ data, period, warehouseName }) {
   const [percent, setPercent] = useState(data.categoryPercent);
-  const [title, setTitle] = useState(data.categoryTitle);
   const [legend, setLegend] = useState(data.legend);
 
   useEffect(() => {
     setPercent(data.categoryPercent);
-    setTitle(data.categoryTitle);
     setLegend(data.legend);
   }, [data]);
 
-  // Calculate pie chart segments
+  // Calculate pie chart segments using reduce (FIXED ESLINT ISSUE #1)
   const radius = 55;
   const center = 65;
   const strokeWidth = 55;
@@ -419,13 +466,11 @@ function CategoryPieChart({ data, period, warehouseName }) {
   // Calculate the total percentage for the pie chart
   const totalPercent = legend.reduce((sum, item) => sum + item.percent, 0);
   
-  // Generate pie segments
-  let currentAngle = 0;
-  const segments = legend.map((item) => {
+  // Generate pie segments using reduce instead of mutable variable
+  const { segments } = legend.reduce((acc, item) => {
     const segmentAngle = (item.percent / totalPercent) * 360;
-    const startAngle = currentAngle;
-    const endAngle = currentAngle + segmentAngle;
-    currentAngle = endAngle;
+    const startAngle = acc.currentAngle;
+    const endAngle = startAngle + segmentAngle;
 
     // Convert angles to radians
     const startRad = (startAngle * Math.PI) / 180;
@@ -447,14 +492,17 @@ function CategoryPieChart({ data, period, warehouseName }) {
       "Z"
     ].join(" ");
 
-    return {
+    acc.segments.push({
       ...item,
       pathData,
       startAngle,
       endAngle,
       midAngle: startAngle + segmentAngle / 2,
-    };
-  });
+    });
+
+    acc.currentAngle = endAngle;
+    return acc;
+  }, { segments: [], currentAngle: 0 });
 
   // Calculate label positions with adjusted spacing
   const labelRadius = radius + strokeWidth / 2 + 8;
@@ -472,10 +520,11 @@ function CategoryPieChart({ data, period, warehouseName }) {
     };
   });
 
-  const getPercentTextColor = (percent) => {
-    if (percent < 30) return "text-red-700";
-    if (percent < 50) return "text-orange-700";
-    if (percent < 70) return "text-yellow-700";
+  // Fixed ESLINT ISSUE #2 - Actually using the function
+  const getPercentTextColor = (percentValue) => {
+    if (percentValue < 30) return "text-red-700";
+    if (percentValue < 50) return "text-orange-700";
+    if (percentValue < 70) return "text-yellow-700";
     return "text-green-700";
   };
 
@@ -484,7 +533,8 @@ function CategoryPieChart({ data, period, warehouseName }) {
       <div className="relative w-full max-w-[280px] h-40 md:h-44 lg:h-48 mb-2 mx-auto">
         {/* Pie Chart SVG */}
         <svg className="w-full h-full" viewBox="0 0 130 130">
-          {segments.map((segment, i) => (
+          {/* Fixed ESLINT ISSUE #3 - Remove unused 'i' parameter */}
+          {segments.map((segment) => (
             <path
               key={segment.label}
               d={segment.pathData}
@@ -499,12 +549,12 @@ function CategoryPieChart({ data, period, warehouseName }) {
           {/* Center hole */}
           <circle cx={center} cy={center} r={radius - strokeWidth / 2} fill="white" />
 
-          {/* Center text - Only show warehouse percentage */}
+          {/* Center text - Fixed to use getPercentTextColor function */}
           <text
             x={center}
             y={center - 3}
             textAnchor="middle"
-            className="text-base font-bold fill-gray-800"
+            className={`text-base font-bold ${getPercentTextColor(percent)}`}
           >
             {percent}%
           </text>
@@ -601,7 +651,8 @@ function ChartTooltip({ label, inward, outward, net, visible, position }) {
   );
 }
 
-function Notification({ message, type, visible, onClose }) {
+// Fixed ESLINT ISSUE #4 - Removed unused onClose prop
+function Notification({ message, type, visible }) {
   if (!visible) return null;
 
   const bgColor = type === "success" ? "bg-green-100 border-green-200 text-green-800" :
@@ -800,6 +851,10 @@ export default function Dashboard() {
 
     let left = rect.left - chartRect.left + rect.width / 2;
     let top = rect.top - chartRect.top - 70;
+    
+    // Tooltip clamp to prevent overflow
+    const tooltipWidth = 140;
+    left = Math.max(8, Math.min(left, chartRect.width - tooltipWidth));
 
     setTooltip({
       visible: true,
@@ -1103,12 +1158,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Notification */}
+      {/* Notification - Fixed to remove onClose prop */}
       <Notification
         message={notification.message}
         type={notification.type}
         visible={notification.visible}
-        onClose={() => setNotification({ ...notification, visible: false })}
       />
     </div>
   );

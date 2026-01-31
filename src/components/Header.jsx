@@ -4,19 +4,22 @@
 
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ChevronRight } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 
-function HeaderNavItem({ to, children, onClick }) {
+function HeaderNavItem({ to, children, onClick, className = "" }) {
   return (
     <NavLink
       to={to}
       onClick={onClick}
       className={({ isActive }) =>
-        `px-4 py-2.5 rounded-md transition-colors whitespace-nowrap font-medium ${isActive
+        `w-full text-left px-4 py-2.5 rounded-md transition-colors font-medium 
+        ${isActive
           ? "bg-blue-600 text-white"
           : "text-gray-300 hover:bg-slate-700 hover:text-white"
-        }`
+        } 
+        ${className} 
+        md:whitespace-nowrap`
       }
     >
       {children}
@@ -174,7 +177,7 @@ function ProfilePanel() {
         const { auth } = await import("../firebase/firebase");
         const firebaseAuth = getAuth(auth);
         await signOut(firebaseAuth);
-      } catch (authError) {
+      } catch {
         console.log('Not using Firebase Auth or already logged out');
       }
 
@@ -216,9 +219,9 @@ function ProfilePanel() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-2">
-        <div className="w-8 h-8 rounded-full bg-slate-700 animate-pulse"></div>
-        <div className="hidden md:block">
+      <div className="flex items-center gap-2 p-2 shrink-0">
+        <div className="w-8 h-8 rounded-full bg-slate-700 animate-pulse shrink-0"></div>
+        <div className="hidden md:block shrink-0">
           <div className="h-3 w-16 bg-slate-700 rounded animate-pulse mb-1"></div>
           <div className="h-2 w-12 bg-slate-700 rounded animate-pulse"></div>
         </div>
@@ -227,20 +230,20 @@ function ProfilePanel() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button
         onClick={toggleProfilePanel}
-        className="profile-button flex items-center gap-2 hover:bg-slate-700 p-2 rounded-lg transition-all duration-200"
+        className="profile-button flex items-center gap-2 hover:bg-slate-700 p-2 rounded-lg transition-all duration-200 shrink-0"
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shrink-0">
           {avatarInitial}
         </div>
-        <div className="text-left hidden md:block">
+        <div className="text-left hidden md:block shrink-0">
           <p className="text-sm font-medium">{fullName}</p>
           <p className="text-xs text-gray-300">{userRole}</p>
         </div>
         <svg
-          className={`w-4 h-4 text-gray-300 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-gray-300 transition-transform duration-200 shrink-0 ${isProfileOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -258,7 +261,7 @@ function ProfilePanel() {
           {/* Profile Header */}
           <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold shrink-0">
                 {avatarInitial}
               </div>
               <div className="flex-1">
@@ -348,23 +351,32 @@ function ProfilePanel() {
 // Main Header Component
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isNavExpanded, setIsNavExpanded] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
+    navigate('/login');
+  };
 
   return (
     <>
       <header className="fixed top-0 left-0 right-0 bg-slate-800 text-white z-50 w-full border-b border-gray-700">
-        <div className="flex items-center justify-between px-6 py-4">
+        {/* 🔴 **CRITICAL FIX: Changed from justify-between to w-full + ml-auto** */}
+        <div className="flex items-center w-full px-4 sm:px-6 py-4">
           {/* Left side - Logo and Title */}
-          <div className="flex items-center">
+          <div className="flex items-center shrink-0">
             <div className="flex flex-col">
-              <h1 className="font-bold text-2xl text-white">WarehouseHub</h1>
-              <p className="text-gray-300 text-sm mt-1">Inventory System</p>
+              <h1 className="font-bold text-xl sm:text-2xl text-white">WarehouseHub</h1>
+              <p className="text-gray-300 text-xs sm:text-sm mt-0.5 sm:mt-1">Inventory System</p>
             </div>
           </div>
 
-          {/* Right side - Navigation, Notification, Profile */}
-          <div className="flex items-center space-x-6">
+          {/* 🔴 **CRITICAL FIX: Changed from space-x-6 to ml-auto + gap-3** */}
+          <div className="flex items-center ml-auto gap-2 sm:gap-4 shrink-0">
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-4 bg-slate-900/50 px-4 py-2 rounded-lg">
+            <div className="hidden lg:flex items-center gap-3 bg-slate-900/50 px-3 sm:px-4 py-2 rounded-lg">
               <HeaderNavItem to="/">Dashboard</HeaderNavItem>
               <HeaderNavItem to="/inventory">Inventory</HeaderNavItem>
               <HeaderNavItem to="/suppliers">Suppliers</HeaderNavItem>
@@ -376,39 +388,110 @@ export default function Header() {
             {/* Profile Panel (Integrated) */}
             <ProfilePanel />
 
-            {/* Mobile Menu Button */}
+            {/* 🔴 **CRITICAL FIX: Mobile Menu Button with proper spacing** */}
             <button
-              className="md:hidden flex-shrink-0"
+              className="lg:hidden flex-shrink-0 ml-1"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-label="Toggle menu"
             >
-              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden bg-slate-900 border-t border-slate-700">
-            <div className="flex flex-col space-y-1 p-4">
-              <HeaderNavItem
-                to="/"
-                onClick={() => setIsMenuOpen(false)}
+          <div className="lg:hidden bg-slate-900 border-t border-slate-700 max-h-[80vh] overflow-y-auto">
+            <div className="p-4">
+
+              {/* NAV BAR - ACCORDION ITEM */}
+              <button
+                onClick={() => setIsNavExpanded(!isNavExpanded)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors mb-1"
               >
-                Dashboard
-              </HeaderNavItem>
-              <HeaderNavItem
-                to="/inventory"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Inventory
-              </HeaderNavItem>
-              <HeaderNavItem
-                to="/suppliers"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Suppliers
-              </HeaderNavItem>
+                <span className="font-medium">Nav Bar</span>
+                <ChevronRight
+                  size={18}
+                  className={`transition-transform duration-200 ${
+                    isNavExpanded ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+
+              {/* NAV BAR SUB ITEMS - Indented for hierarchy */}
+              {isNavExpanded && (
+                <div className="ml-4 pl-4 border-l border-slate-700 flex flex-col space-y-1 mb-3">
+                  <HeaderNavItem 
+                    to="/" 
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full"
+                  >
+                    Dashboard
+                  </HeaderNavItem>
+                  <HeaderNavItem 
+                    to="/inventory" 
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full"
+                  >
+                    Inventory
+                  </HeaderNavItem>
+                  <HeaderNavItem 
+                    to="/suppliers" 
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full"
+                  >
+                    Suppliers
+                  </HeaderNavItem>
+                </div>
+              )}
+
+              {/* SIDEBAR ITEMS - Full width vertical list */}
+              <div className="flex flex-col space-y-1">
+                <HeaderNavItem to="/products" onClick={() => setIsMenuOpen(false)}>
+                  Products
+                </HeaderNavItem>
+                <HeaderNavItem to="/warehouses" onClick={() => setIsMenuOpen(false)}>
+                  Warehouses
+                </HeaderNavItem>
+                <HeaderNavItem to="/stock-in" onClick={() => setIsMenuOpen(false)}>
+                  Stock In
+                </HeaderNavItem>
+                <HeaderNavItem to="/stock-out" onClick={() => setIsMenuOpen(false)}>
+                  Stock Out
+                </HeaderNavItem>
+                <HeaderNavItem to="/low-stock" onClick={() => setIsMenuOpen(false)}>
+                  Low Stock
+                </HeaderNavItem>
+                <HeaderNavItem to="/expiry-alerts" onClick={() => setIsMenuOpen(false)}>
+                  Expiry Alerts
+                </HeaderNavItem>
+                <HeaderNavItem to="/reports" onClick={() => setIsMenuOpen(false)}>
+                  Reports
+                </HeaderNavItem>
+                <HeaderNavItem to="/users" onClick={() => setIsMenuOpen(false)}>
+                  Users
+                </HeaderNavItem>
+                <HeaderNavItem to="/settings" onClick={() => setIsMenuOpen(false)}>
+                  Settings
+                </HeaderNavItem>
+              </div>
+
+              {/* LOGOUT BUTTON */}
+              <div className="pt-4 mt-4 border-t border-slate-700">
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 transition-colors text-white rounded-lg font-medium"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span>Logout</span>
+                </button>
+              </div>
+
             </div>
           </div>
         )}

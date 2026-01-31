@@ -90,7 +90,7 @@ export default function Inventory() {
         <div className="flex gap-3">
           <input
             placeholder="Search..."
-            className="px-4 py-2 border rounded-lg w-64"
+            className="px-4 py-2 border rounded-lg w-full md:w-64"
             onChange={e => {
               setSearch(e.target.value.toLowerCase());
               setPage(1);
@@ -112,74 +112,77 @@ export default function Inventory() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={exportCSV} className="px-4 py-2 border rounded-lg">
+          <button onClick={exportCSV} className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors">
             Export
           </button>
           <button
             onClick={() => alert("Inventory refreshed!")}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             Refresh
           </button>
         </div>
       </div>
 
-      {/* TABLE */}
+      {/* TABLE - UPDATED WITH HORIZONTAL SCROLL */}
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-blue-600 text-white">
-            <tr>
-              {["SKU", "Product", "Warehouse", "Batch", "Qty", "Unit", "Expiry", "Status"].map(h => (
-                <th key={h} className="px-6 py-3 text-left text-xs font-medium uppercase">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody className="divide-y">
-            {pageData.length === 0 ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full text-sm">
+            {/* FIXED: Changed from sticky to md:sticky */}
+            <thead className="bg-blue-600 text-white md:sticky md:top-0 z-10">
               <tr>
-                <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                  No inventory items found
-                </td>
+                {["SKU", "Product", "Warehouse", "Batch", "Qty", "Unit", "Expiry", "Status"].map(h => (
+                  <th key={h} className="px-6 py-3 text-left text-xs font-medium uppercase whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ) : (
-              pageData.map(item => (
-                <tr key={item.sku} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium">{item.sku}</td>
-                  <td className="px-6 py-4">{item.name}</td>
-                  <td className="px-6 py-4">{item.warehouse}</td>
-                  <td className="px-6 py-4">{item.batch}</td>
-                  <td className="px-6 py-4">{item.qty}</td>
-                  <td className="px-6 py-4">{item.unit}</td>
-                  <td className="px-6 py-4">{item.expiry}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      item.qty < 50
-                        ? "bg-red-100 text-red-700"
-                        : "bg-green-100 text-green-700"
-                    }`}>
-                      {item.qty < 50 ? "Low Stock" : "Available"}
-                    </span>
+            </thead>
+
+            <tbody className="divide-y">
+              {pageData.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
+                    No inventory items found
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                pageData.map(item => (
+                  <tr key={item.sku} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 font-medium whitespace-nowrap">{item.sku}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{item.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{item.warehouse}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{item.batch}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{item.qty}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{item.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{item.expiry}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        item.qty < 50
+                          ? "bg-red-100 text-red-700"
+                          : "bg-green-100 text-green-700"
+                      }`}>
+                        {item.qty < 50 ? "Low Stock" : "Available"}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {/* FOOTER */}
-        <div className="px-6 py-4 flex justify-between items-center text-sm text-gray-600">
-          <span>
+        {/* FOOTER - PAGINATION */}
+        <div className="px-6 py-4 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-600 border-t">
+          <span className="mb-2 sm:mb-0">
             Showing {start}-{end} of {filteredData.length} entries
           </span>
 
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <button
               disabled={page === 1}
               onClick={() => setPage(p => p - 1)}
-              className="w-8 h-8 border rounded disabled:text-gray-400"
+              className="w-8 h-8 border rounded disabled:text-gray-400 hover:bg-gray-50 transition-colors disabled:hover:bg-transparent"
             >
               ‹
             </button>
@@ -189,8 +192,10 @@ export default function Inventory() {
                 key={i}
                 onClick={() => setPage(i + 1)}
                 className={`w-8 h-8 border rounded ${
-                  page === i + 1 ? "bg-blue-600 text-white" : ""
-                }`}
+                  page === i + 1 
+                    ? "bg-blue-600 text-white hover:bg-blue-700" 
+                    : "hover:bg-gray-50"
+                } transition-colors`}
               >
                 {i + 1}
               </button>
@@ -199,7 +204,7 @@ export default function Inventory() {
             <button
               disabled={page === totalPages}
               onClick={() => setPage(p => p + 1)}
-              className="w-8 h-8 border rounded disabled:text-gray-400"
+              className="w-8 h-8 border rounded disabled:text-gray-400 hover:bg-gray-50 transition-colors disabled:hover:bg-transparent"
             >
               ›
             </button>

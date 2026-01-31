@@ -488,3 +488,97 @@ header {
     padding: 0.5rem;
   }
 }
+/* =========================
+   DASHBOARD STAT CARD FIX
+========================= */
+
+/* Ensure left color border shows on mobile */
+.stat-card {
+  border-left-width: 3px; /* Mobile fallback for border-l-3 */
+}
+
+/* Keep larger border on md+ as designed */
+@media (min-width: 768px) {
+  .stat-card {
+    border-left-width: 4px;
+  }
+}
+/* =========================
+   GLOBAL MOBILE SAFETY
+========================= */
+
+/* Prevent horizontal scroll on all screens */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Ensure images & SVGs never overflow */
+img, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Better mobile font rendering */
+body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* =========================
+   LOGIN PAGE FIXES
+========================= */
+
+/* Prevent header padding-top affecting login page */
+@media (max-width: 768px) {
+  body:has(.min-h-screen) {
+    padding-top: 0 !important;
+  }
+}
+
+/* Ensure login card never overflows viewport */
+.min-h-screen {
+  min-height: 100dvh; /* Fix iOS viewport bug */
+}
+
+/* Improve touch behavior for inputs & buttons */
+input,
+button {
+  touch-action: manipulation;
+}
+
+/* Prevent long messages from breaking layout */
+.text-center {
+  word-break: break-word;
+}
+
+/* =========================
+   SMALL MOBILE OPTIMIZATIONS
+========================= */
+
+@media (max-width: 640px) {
+  /* Reduce excessive shadows on low-end devices */
+  .shadow-2xl {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Prevent button loading text overflow */
+  button span {
+    max-width: 100%;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+}
+
+/* =========================
+   TABLET & IPAD FIXES
+========================= */
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Center login card perfectly on tablets */
+  .min-h-screen {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}

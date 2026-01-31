@@ -12,7 +12,10 @@ import {
   FiLogOut,
 } from "react-icons/fi";
 
-function NavItem({ to, children, icon: Icon, iconColor }) {
+function NavItem({ to, children, icon, iconColor }) {
+  // Assign the icon prop to a variable that ESLint can recognize
+  const Icon = icon;
+
   return (
     <NavLink
       to={to}
@@ -38,7 +41,22 @@ export default function Sidebar() {
   };
 
   return (
-<aside className="w-64 bg-slate-900 text-white hidden lg:block fixed left-0 top-[88px] bottom-10 border-r border-slate-800">      {/* Container for scrollable content */}
+    <aside
+      className="
+        fixed
+        top-[88px] bottom-10
+        left-0
+        w-64
+        bg-slate-900 text-white
+        transform
+        -translate-x-full lg:translate-x-0
+        transition-transform duration-300
+        z-40
+        border-r border-slate-800
+        hidden lg:block
+      "
+    >
+      {/* Container for scrollable content */}
       <div className="h-full flex flex-col">
         {/* Scrollable nav items - this will scroll */}
         <nav className="space-y-1 p-4 overflow-y-auto flex-1">

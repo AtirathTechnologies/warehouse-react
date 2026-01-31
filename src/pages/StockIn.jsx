@@ -204,26 +204,39 @@ export default function StockIn() {
         <p className="text-gray-600 mt-1">Track incoming inventory from suppliers</p>
       </div>
 
-      {/* TOOLBAR */}
+      {/* FIXED TOOLBAR */}
       <div className="bg-white p-4 rounded-lg shadow-sm border">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          
+          {/* SEARCH */}
           <div className="flex-1">
             <div className="relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
               <input
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="w-full pl-10 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Search products, SKU, invoice..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
           </div>
-          
-          <div className="flex gap-3">
-            <select 
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[140px]"
+
+          {/* ACTIONS */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3 lg:flex-nowrap">
+            <select
+              className="w-full sm:w-auto px-4 py-2.5 border rounded-lg bg-white"
               value={category}
               onChange={e => setCategory(e.target.value)}
             >
@@ -233,17 +246,17 @@ export default function StockIn() {
               ))}
             </select>
 
-            <button className="px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+            <button className="w-full sm:w-auto px-4 py-2.5 border rounded-lg hover:bg-gray-50">
               Filter
             </button>
-            
-            <button className="px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+
+            <button className="w-full sm:w-auto px-4 py-2.5 border rounded-lg hover:bg-gray-50">
               Export
             </button>
-            
-            <button 
+
+            <button
               onClick={() => setShowModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm hover:shadow-md flex items-center gap-2"
+              className="col-span-2 sm:col-span-1 w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
