@@ -1,17 +1,404 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  collection, 
-  addDoc, 
+import {
+  collection,
+  addDoc,
   getDoc,
-  onSnapshot, 
-  query, 
-  orderBy, 
-  updateDoc, 
+  onSnapshot,
+  query,
+  orderBy,
+  updateDoc,
   doc,
   Timestamp,
   deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/firebase';
+
+// ===============================
+// ADD PRODUCT COMPONENT
+// ===============================
+export const AddProduct = ({ productId = null, onCancel, onSuccess }) => {
+  const [allCategories, setAllCategories] = useState([]);
+  const [allBrands, setAllBrands] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // Form State
+  const [formData, setFormData] = useState({
+    sku: '',
+    name: '',
+    category: '',
+    brand: '',
+    unit: 'kg',
+    stock: 0,
+    minStock: 10,
+    price: 0,
+    warehouse: 'Main Warehouse',
+    expiryDate: '',
+    description: ''
+  });
+
+  // ===============================
+  // LOAD CATEGORIES AND BRANDS
+  // ===============================
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+
+      // Load categories
+      const categoriesUnsub = onSnapshot(
+        query(collection(db, 'categories'), orderBy('name')),
+        (snapshot) => {
+          const categories = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setAllCategories(categories);
+        },
+        (error) => {
+          console.error('Error loading categories:', error);
+        }
+      );
+
+      // Load brands
+      const brandsUnsub = onSnapshot(
+        query(collection(db, 'brands'), orderBy('name')),
+        (snapshot) => {
+          const brands = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setAllBrands(brands);
+        },
+        (error) => {
+          console.error('Error loading brands:', error);
+        }
+      );
+
+      // Load product data if editing
+      if (productId) {
+        try {
+          const productSnap = await getDoc(doc(db, 'products', productId));
+          if (productSnap.exists()) {
+            const product = productSnap.data();
+            setFormData({
+              sku: product.sku || '',
+              name: product.name || '',
+              category: product.category || '',
+              brand: product.brand || '',
+              unit: product.unit || 'kg',
+              stock: product.stock || 0,
+              minStock: product.minStock || 10,
+              price: product.price || 0,
+              warehouse: product.warehouse || 'Main Warehouse',
+              expiryDate: product.expiryDate || '',
+              description: product.description || ''
+            });
+          }
+        } catch (error) {
+          console.error('Error loading product:', error);
+        }
+      }
+
+      setIsLoading(false);
+
+      return () => {
+        categoriesUnsub();
+        brandsUnsub();
+      };
+    };
+
+    loadData();
+  }, [productId]);
+
+  // ===============================
+  // TOAST NOTIFICATION
+  // ===============================
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  }, []);
+
+  // ===============================
+  // FORM HANDLING
+  // ===============================
+  const handleInputChange = (e) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [id]: value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.sku.trim() || !formData.name.trim() || !formData.category || !formData.brand.trim()) {
+      showToast('Please fill in all required fields', 'error');
+      return;
+    }
+
+    try {
+      const product = {
+        sku: formData.sku.trim(),
+        name: formData.name.trim(),
+        category: formData.category,
+        brand: formData.brand.trim(),
+        unit: formData.unit,
+        stock: Number(formData.stock),
+        minStock: Number(formData.minStock),
+        price: Number(formData.price),
+        warehouse: formData.warehouse,
+        expiryDate: formData.expiryDate || null,
+        description: formData.description.trim(),
+        status: 'Active',
+        updatedAt: Timestamp.now()
+      };
+
+      if (productId) {
+        await updateDoc(doc(db, 'products', productId), product);
+        showToast('Product updated successfully!', 'success');
+      } else {
+        product.createdAt = Timestamp.now();
+        await addDoc(collection(db, 'products'), product);
+        showToast('Product added successfully!', 'success');
+      }
+
+      // Call onSuccess callback to navigate back
+      if (onSuccess) {
+        onSuccess();
+      }
+
+    } catch (error) {
+      console.error('Error saving product:', error);
+      showToast('Failed to save product', 'error');
+    }
+  };
+
+  // ===============================
+  // NAVIGATION
+  // ===============================
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-4">{productId ? 'Edit Product' : 'Add New Product'}</h1>
+        <div className="bg-white rounded-xl shadow-md p-6 max-w-4xl border-t-4 border-blue-600">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-6">
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-lg shadow-xl text-sm flex items-center gap-2 min-w-[300px] max-w-md animate-fade-in ${
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          'bg-blue-600 text-white'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0">
+              {toast.type === 'success' ? '✓' : '✗'}
+            </div>
+            <div className="flex-1">{toast.message}</div>
+          </div>
+        </div>
+      )}
+
+      <h1 className="text-2xl font-bold mb-4">{productId ? 'Edit Product' : 'Add New Product'}</h1>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-4xl border-t-4 border-blue-600">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">SKU *</label>
+            <input
+              id="sku"
+              type="text"
+              value={formData.sku}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="e.g., SKU-1005"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+            <input
+              id="name"
+              type="text"
+              value={formData.name}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="e.g., Basmati Rice"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+            <select
+              id="category"
+              value={formData.category}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              required
+            >
+              <option value="">Select Category</option>
+              {allCategories.map(cat => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Brand *</label>
+            <select
+              id="brand"
+              value={formData.brand}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              required
+            >
+              <option value="">Select Brand</option>
+              {allBrands.map(brand => (
+                <option key={brand.id} value={brand.name}>{brand.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+            <select
+              id="unit"
+              value={formData.unit}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              required
+            >
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="pcs">pcs</option>
+              <option value="liter">liter</option>
+              <option value="pack">pack</option>
+              <option value="box">box</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Initial Stock *</label>
+            <input
+              id="stock"
+              type="number"
+              value={formData.stock}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="0"
+              min="0"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min Stock *</label>
+            <input
+              id="minStock"
+              type="number"
+              value={formData.minStock}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="10"
+              min="0"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹) *</label>
+            <input
+              id="price"
+              type="number"
+              step="0.01"
+              value={formData.price}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="0.00"
+              min="0"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse *</label>
+            <select
+              id="warehouse"
+              value={formData.warehouse}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              required
+            >
+              <option value="">Select Warehouse</option>
+              <option value="Main Warehouse">Main Warehouse</option>
+              <option value="North Branch">North Branch</option>
+              <option value="South Branch">South Branch</option>
+              <option value="East Branch">East Branch</option>
+              <option value="West Branch">West Branch</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+            <input
+              id="expiryDate"
+              type="date"
+              value={formData.expiryDate}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              id="description"
+              rows="3"
+              value={formData.description}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="Product description..."
+            />
+          </div>
+
+          <div className="md:col-span-2 flex justify-end space-x-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+            >
+              {productId ? 'Update Product' : 'Save Product'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 // ===============================
 // PRODUCTS COMPONENT
@@ -23,7 +410,7 @@ const Products = () => {
   const [allProducts, setAllProducts] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
   const [allBrands, setAllBrands] = useState([]);
-  
+
   // UI State
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
   const [currentCategoryFilter, setCurrentCategoryFilter] = useState('all');
@@ -31,11 +418,13 @@ const Products = () => {
   const [brandView, setBrandView] = useState('preview'); // preview | all
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Modal States
   const [showEntityModal, setShowEntityModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  
+  const [showAddProductForm, setShowAddProductForm] = useState(false);
+  const [editingProductData, setEditingProductData] = useState(null);
+
   // Entity Modal State
   const [entityModal, setEntityModal] = useState({
     type: 'category', // 'category' or 'brand'
@@ -43,20 +432,17 @@ const Products = () => {
     id: null,
     name: ''
   });
-  
+
   // Delete Modal State
   const [deleteModal, setDeleteModal] = useState({
     type: '', // 'product', 'category', 'brand'
     id: '',
     name: ''
   });
-  
+
   // Toast State
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-  
-  // Editing Product State
-  const [editingProductId, setEditingProductId] = useState(null);
-  
+
   // Constants
   const ITEMS_PER_PAGE = 5;
 
@@ -91,7 +477,7 @@ const Products = () => {
         setIsLoading(false);
       }
     );
-    
+
     // Load categories
     const categoriesUnsub = onSnapshot(
       query(collection(db, 'categories'), orderBy('name')),
@@ -106,7 +492,7 @@ const Products = () => {
         console.error('Error loading categories:', error);
       }
     );
-    
+
     // Load brands
     const brandsUnsub = onSnapshot(
       query(collection(db, 'brands'), orderBy('name')),
@@ -121,7 +507,7 @@ const Products = () => {
         console.error('Error loading brands:', error);
       }
     );
-    
+
     return () => {
       productsUnsub();
       categoriesUnsub();
@@ -134,7 +520,7 @@ const Products = () => {
   // ===============================
   const filteredProducts = useMemo(() => {
     let filtered = [...allProducts];
-    
+
     // Apply search filter
     if (currentSearchTerm) {
       filtered = filtered.filter(p =>
@@ -144,12 +530,12 @@ const Products = () => {
         (p.category || '').toLowerCase().includes(currentSearchTerm)
       );
     }
-    
+
     // Apply category filter
     if (currentCategoryFilter !== 'all') {
       filtered = filtered.filter(p => p.category === currentCategoryFilter);
     }
-    
+
     return filtered;
   }, [allProducts, currentSearchTerm, currentCategoryFilter]);
 
@@ -196,17 +582,17 @@ const Products = () => {
   // ===============================
   const handleEntitySave = async (e) => {
     e.preventDefault();
-    
+
     const name = entityModal.name.trim();
-    
+
     if (!name) {
       showToast('Please enter a name', 'error');
       return;
     }
-    
+
     try {
       const collectionName = entityModal.type === 'category' ? 'categories' : 'brands';
-      
+
       if (entityModal.mode === 'add') {
         await addDoc(collection(db, collectionName), {
           name: name,
@@ -221,7 +607,7 @@ const Products = () => {
         });
         showToast(`${entityModal.type.charAt(0).toUpperCase() + entityModal.type.slice(1)} updated successfully`, 'success');
       }
-      
+
       closeEntityModal();
     } catch (error) {
       console.error(`Error saving ${entityModal.type}:`, error);
@@ -235,7 +621,7 @@ const Products = () => {
   const handleDelete = async () => {
     try {
       let collectionName = '';
-      
+
       switch (deleteModal.type) {
         case 'product':
           collectionName = 'products';
@@ -249,7 +635,7 @@ const Products = () => {
         default:
           return;
       }
-      
+
       await deleteDoc(doc(db, collectionName, deleteModal.id));
       showToast(`${deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1)} deleted successfully`, 'success');
       closeDeleteModal();
@@ -263,8 +649,19 @@ const Products = () => {
   // NAVIGATION
   // ===============================
   const navigateToAddProduct = (productId = null) => {
-    setEditingProductId(productId);
-    window.location.hash = productId ? `#/addProduct?edit=${productId}` : '#/addProduct';
+    if (productId) {
+      // Find the product to edit
+      const productToEdit = allProducts.find(p => p.id === productId);
+      setEditingProductData(productToEdit);
+    } else {
+      setEditingProductData(null);
+    }
+    setShowAddProductForm(true);
+  };
+
+  const navigateBackToProducts = () => {
+    setShowAddProductForm(false);
+    setEditingProductData(null);
   };
 
   // ===============================
@@ -280,7 +677,7 @@ const Products = () => {
         </tr>
       );
     }
-    
+
     if (totalItems === 0) {
       return (
         <tr>
@@ -329,10 +726,10 @@ const Products = () => {
   // ===============================
   const renderPaginationControls = () => {
     if (totalItems === 0) return null;
-    
+
     const start = totalItems === 0 ? 0 : startIndex + 1;
     const end = Math.min(endIndex, totalItems);
-    
+
     const buttons = [];
     for (let i = 1; i <= totalPages; i++) {
       buttons.push(
@@ -349,7 +746,7 @@ const Products = () => {
         </button>
       );
     }
-    
+
     return (
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <p className="text-sm text-gray-600">
@@ -369,18 +766,18 @@ const Products = () => {
     if (allCategories.length === 0) {
       return <div className="p-4 border rounded-lg"><p className="text-slate-500">No categories found</p></div>;
     }
-    
+
     const list = limit ? allCategories.slice(0, 3) : allCategories;
-    
+
     return (
       <div className={`space-y-4 ${!limit ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : ''}`}>
         {list.map(category => {
           // Count products in this category
           const productCount = allProducts.filter(p => p.category === category.name).length;
-          
+
           return (
-            <div 
-              key={category.id} 
+            <div
+              key={category.id}
               className={`bg-white border rounded-lg hover:bg-slate-50 transition-colors ${!limit ? 'p-5' : 'p-4'}`}
             >
               <div className="flex justify-between items-start">
@@ -419,18 +816,18 @@ const Products = () => {
     if (allBrands.length === 0) {
       return <div className="p-4 border rounded-lg"><p className="text-slate-500">No brands found</p></div>;
     }
-    
+
     const list = limit ? allBrands.slice(0, 4) : allBrands;
-    
+
     return (
       <div className={`space-y-4 ${!limit ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : ''}`}>
         {list.map(brand => {
           // Count products in this brand
           const productCount = allProducts.filter(p => p.brand === brand.name).length;
-          
+
           return (
-            <div 
-              key={brand.id} 
+            <div
+              key={brand.id}
               className={`bg-white border rounded-lg hover:bg-slate-50 transition-colors ${!limit ? 'p-5' : 'p-4'}`}
             >
               <div className="flex justify-between items-start">
@@ -496,7 +893,7 @@ const Products = () => {
             {allCategories.map(category => {
               // Count products in this category
               const productCount = allProducts.filter(p => p.category === category.name).length;
-              
+
               return (
                 <div key={category.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
                   <div className="flex justify-between items-start">
@@ -660,7 +1057,7 @@ const Products = () => {
             {allBrands.map(brand => {
               // Count products in this brand
               const productCount = allProducts.filter(p => p.brand === brand.name).length;
-              
+
               return (
                 <div key={brand.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
                   <div className="flex justify-between items-start">
@@ -810,146 +1207,157 @@ const Products = () => {
           </div>
         </div>
       )}
+      
+      {/* SHOW ADD PRODUCT FORM WHEN NEEDED */}
+      {showAddProductForm ? (
+        <AddProduct 
+          productId={editingProductData?.id} 
+          onCancel={navigateBackToProducts}
+          onSuccess={navigateBackToProducts}
+        />
+      ) : (
+        <>
+          <h1 className="text-2xl font-bold mb-4">Products</h1>
 
-      <h1 className="text-2xl font-bold mb-4">Products</h1>
+          {/* Search and Filters */}
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[180px] sm:min-w-[240px] md:min-w-[300px]">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+              <input
+                type="text"
+                placeholder="Search products, SKU..."
+                value={currentSearchTerm}
+                onChange={(e) => setCurrentSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm bg-white text-gray-800 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-      {/* Search and Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[180px] sm:min-w-[240px] md:min-w-[300px]">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-          <input
-            type="text"
-            placeholder="Search products, SKU..."
-            value={currentSearchTerm}
-            onChange={(e) => setCurrentSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-white text-gray-800 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <select
-          value={currentCategoryFilter}
-          onChange={(e) => setCurrentCategoryFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
-        >
-          <option value="all">All Categories</option>
-          {allCategories.map(cat => (
-            <option key={cat.id} value={cat.name}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
-
-        <button
-          onClick={() => navigateToAddProduct()}
-          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition whitespace-nowrap"
-        >
-          + Add Product
-        </button>
-      </div>
-
-      {/* Products Table */}
-      <div className="bg-white rounded-xl shadow-md mb-4 border-t-4 border-blue-600 overflow-x-auto">
-        <table className="w-full min-w-[900px]">
-          <thead className="bg-blue-600 border-b border-slate-200">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">SKU</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Product Name</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Brand</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Unit</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Min Stock</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {renderProductsTable()}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="mt-4 mb-8">
-        {renderPaginationControls()}
-      </div>
-
-      {/* Categories Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">Categories</h2>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
-            <h3 className="text-lg font-semibold text-slate-900 mb-6">Add New Category</h3>
-            <button
-              onClick={() => openEntityModal('category')}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+            <select
+              value={currentCategoryFilter}
+              onChange={(e) => setCurrentCategoryFilter(e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
             >
-              + Add Category
+              <option value="all">All Categories</option>
+              {allCategories.map(cat => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => navigateToAddProduct()}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition whitespace-nowrap"
+            >
+              + Add Product
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Existing Categories</h3>
-            <div className="space-y-4">
-              {renderCategoriesList(true)}
+          {/* Products Table */}
+          <div className="bg-white rounded-xl shadow-md mb-4 border-t-4 border-blue-600 overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-blue-600 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">SKU</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Product Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Category</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Brand</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Unit</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Min Stock</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {renderProductsTable()}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-4 mb-8">
+            {renderPaginationControls()}
+          </div>
+
+          {/* Categories Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Categories</h2>
+              </div>
             </div>
             
-            {allCategories.length > 3 && (
-              <div className="mt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
+                <h3 className="text-lg font-semibold text-slate-900 mb-6">Add New Category</h3>
                 <button
-                  onClick={() => setCategoryView('all')}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  onClick={() => openEntityModal('category')}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
                 >
-                  View All Categories ({allCategories.length})
+                  + Add Category
                 </button>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
 
-      {/* Brands Section */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+              <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Existing Categories</h3>
+                <div className="space-y-4">
+                  {renderCategoriesList(true)}
+                </div>
+                
+                {allCategories.length > 3 && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setCategoryView('all')}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      View All Categories ({allCategories.length})
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Brands Section */}
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Brands</h2>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
-            <h3 className="text-lg font-semibold text-slate-900 mb-6">Add New Brand</h3>
-            <button
-              onClick={() => openEntityModal('brand')}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
-            >
-              + Add Brand
-            </button>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Existing Brands</h3>
-            <div className="space-y-4">
-              {renderBrandsList(true)}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Brands</h2>
+              </div>
             </div>
             
-            {allBrands.length > 4 && (
-              <div className="mt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
+                <h3 className="text-lg font-semibold text-slate-900 mb-6">Add New Brand</h3>
                 <button
-                  onClick={() => setBrandView('all')}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  onClick={() => openEntityModal('brand')}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
                 >
-                  View All Brands ({allBrands.length})
+                  + Add Brand
                 </button>
               </div>
-            )}
+
+              <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-600">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Existing Brands</h3>
+                <div className="space-y-4">
+                  {renderBrandsList(true)}
+                </div>
+                
+                {allBrands.length > 4 && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setBrandView('all')}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      View All Brands ({allBrands.length})
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* ===============================
       // MODALS
@@ -1047,389 +1455,6 @@ const Products = () => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-// ===============================
-// ADD PRODUCT COMPONENT (UNCHANGED)
-// ===============================
-export const AddProduct = ({ productId = null }) => {
-  const [allCategories, setAllCategories] = useState([]);
-  const [allBrands, setAllBrands] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-  
-  // Form State
-  const [formData, setFormData] = useState({
-    sku: '',
-    name: '',
-    category: '',
-    brand: '',
-    unit: 'kg',
-    stock: 0,
-    minStock: 10,
-    price: 0,
-    warehouse: 'Main Warehouse',
-    expiryDate: '',
-    description: ''
-  });
-
-  // ===============================
-  // LOAD CATEGORIES AND BRANDS
-  // ===============================
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      
-      // Load categories
-      const categoriesUnsub = onSnapshot(
-        query(collection(db, 'categories'), orderBy('name')),
-        (snapshot) => {
-          const categories = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setAllCategories(categories);
-        },
-        (error) => {
-          console.error('Error loading categories:', error);
-        }
-      );
-      
-      // Load brands
-      const brandsUnsub = onSnapshot(
-        query(collection(db, 'brands'), orderBy('name')),
-        (snapshot) => {
-          const brands = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setAllBrands(brands);
-        },
-        (error) => {
-          console.error('Error loading brands:', error);
-        }
-      );
-      
-      // Load product data if editing
-      if (productId) {
-        try {
-          const productSnap = await getDoc(doc(db, 'products', productId));
-          if (productSnap.exists()) {
-            const product = productSnap.data();
-            setFormData({
-              sku: product.sku || '',
-              name: product.name || '',
-              category: product.category || '',
-              brand: product.brand || '',
-              unit: product.unit || 'kg',
-              stock: product.stock || 0,
-              minStock: product.minStock || 10,
-              price: product.price || 0,
-              warehouse: product.warehouse || 'Main Warehouse',
-              expiryDate: product.expiryDate || '',
-              description: product.description || ''
-            });
-          }
-        } catch (error) {
-          console.error('Error loading product:', error);
-        }
-      }
-      
-      setIsLoading(false);
-      
-      return () => {
-        categoriesUnsub();
-        brandsUnsub();
-      };
-    };
-    
-    loadData();
-  }, [productId]);
-
-  // ===============================
-  // TOAST NOTIFICATION
-  // ===============================
-  const showToast = useCallback((message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: '', type: 'success' });
-    }, 3000);
-  }, []);
-
-  // ===============================
-  // FORM HANDLING
-  // ===============================
-  const handleInputChange = (e) => {
-    const { id, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [id]: value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Validation
-    if (!formData.sku.trim() || !formData.name.trim() || !formData.category || !formData.brand.trim()) {
-      showToast('Please fill in all required fields', 'error');
-      return;
-    }
-
-    try {
-      const product = {
-        sku: formData.sku.trim(),
-        name: formData.name.trim(),
-        category: formData.category,
-        brand: formData.brand.trim(),
-        unit: formData.unit,
-        stock: Number(formData.stock),
-        minStock: Number(formData.minStock),
-        price: Number(formData.price),
-        warehouse: formData.warehouse,
-        expiryDate: formData.expiryDate || null,
-        description: formData.description.trim(),
-        status: 'Active',
-        updatedAt: Timestamp.now()
-      };
-
-      if (productId) {
-        await updateDoc(doc(db, 'products', productId), product);
-        showToast('Product updated successfully!', 'success');
-      } else {
-        product.createdAt = Timestamp.now();
-        await addDoc(collection(db, 'products'), product);
-        showToast('Product added successfully!', 'success');
-      }
-      
-      // Navigate back to products list
-      window.location.hash = '#/products';
-      
-    } catch (error) {
-      console.error('Error saving product:', error);
-      showToast('Failed to save product', 'error');
-    }
-  };
-
-  // ===============================
-  // NAVIGATION
-  // ===============================
-  const navigateToProducts = () => {
-    window.location.hash = '#/products';
-  };
-
-  if (isLoading) {
-    return (
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">{productId ? 'Edit Product' : 'Add New Product'}</h1>
-        <div className="bg-white rounded-xl shadow-md p-6 max-w-4xl border-t-4 border-blue-600">
-          <p className="text-gray-500">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mb-6">
-      {/* Toast Notification */}
-      {toast.show && (
-        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-lg shadow-xl text-sm flex items-center gap-2 min-w-[300px] max-w-md animate-fade-in ${
-          toast.type === 'success' ? 'bg-green-600 text-white' : 
-          toast.type === 'error' ? 'bg-red-600 text-white' : 
-          'bg-blue-600 text-white'
-        }`}>
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0">
-              {toast.type === 'success' ? '✓' : '✗'}
-            </div>
-            <div className="flex-1">{toast.message}</div>
-          </div>
-        </div>
-      )}
-
-      <h1 className="text-2xl font-bold mb-4">{productId ? 'Edit Product' : 'Add New Product'}</h1>
-      
-      <div className="bg-white rounded-xl shadow-md p-6 max-w-4xl border-t-4 border-blue-600">
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">SKU *</label>
-            <input
-              id="sku"
-              type="text"
-              value={formData.sku}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="e.g., SKU-1005"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
-            <input
-              id="name"
-              type="text"
-              value={formData.name}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="e.g., Basmati Rice"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-            <select
-              id="category"
-              value={formData.category}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              required
-            >
-              <option value="">Select Category</option>
-              {allCategories.map(cat => (
-                <option key={cat.id} value={cat.name}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Brand *</label>
-            <select
-              id="brand"
-              value={formData.brand}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              required
-            >
-              <option value="">Select Brand</option>
-              {allBrands.map(brand => (
-                <option key={brand.id} value={brand.name}>{brand.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
-            <select
-              id="unit"
-              value={formData.unit}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              required
-            >
-              <option value="kg">kg</option>
-              <option value="g">g</option>
-              <option value="pcs">pcs</option>
-              <option value="liter">liter</option>
-              <option value="pack">pack</option>
-              <option value="box">box</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Initial Stock *</label>
-            <input
-              id="stock"
-              type="number"
-              value={formData.stock}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="0"
-              min="0"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Min Stock *</label>
-            <input
-              id="minStock"
-              type="number"
-              value={formData.minStock}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="10"
-              min="0"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹) *</label>
-            <input
-              id="price"
-              type="number"
-              step="0.01"
-              value={formData.price}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="0.00"
-              min="0"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse *</label>
-            <select
-              id="warehouse"
-              value={formData.warehouse}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              required
-            >
-              <option value="">Select Warehouse</option>
-              <option value="Main Warehouse">Main Warehouse</option>
-              <option value="North Branch">North Branch</option>
-              <option value="South Branch">South Branch</option>
-              <option value="East Branch">East Branch</option>
-              <option value="West Branch">West Branch</option>
-            </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-            <input
-              id="expiryDate"
-              type="date"
-              value={formData.expiryDate}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              id="description"
-              rows="3"
-              value={formData.description}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="Product description..."
-            />
-          </div>
-
-          <div className="md:col-span-2 flex justify-end space-x-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={navigateToProducts}
-              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
-            >
-              {productId ? 'Update Product' : 'Save Product'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 };
