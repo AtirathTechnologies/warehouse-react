@@ -18,6 +18,9 @@ import Suppliers from "./pages/Suppliers";
 import Users from "./pages/Users";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Terms from "./pages/TermsOfService";
+import Support from "./pages/Support";
 
 function ProtectedRoute({ children }) {
   const { user } = useApp();
@@ -54,6 +57,9 @@ export default function App() {
             <Route path="/users" element={<Users />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/support" element={<Support />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
