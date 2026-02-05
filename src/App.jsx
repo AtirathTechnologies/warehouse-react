@@ -21,6 +21,7 @@ import Settings from "./pages/Settings";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Terms from "./pages/TermsOfService";
 import Support from "./pages/Support";
+import AuditLogs from "./pages/AuditLogs";
 
 function ProtectedRoute({ children }) {
   const { user } = useApp();
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/suppliers" element={<Suppliers />} />
             <Route path="/users" element={<Users />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/auditlogs" element={<AuditLogs />}/>
             <Route path="/settings" element={<Settings />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<Terms />} />

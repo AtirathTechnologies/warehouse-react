@@ -12,6 +12,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import { useApp } from "../context/AppContext";
 
 /* ===============================
    ROLE PERMISSIONS
@@ -59,12 +60,17 @@ const getUserGradient = (user) => {
 };
 
 export default function Users() {
+  const { user: currentUser } = useApp(); // 🔴 GET CURRENT USER FROM CONTEXT
+  
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // 🔴 NEW STATE: User Rules
+  const [userRules, setUserRules] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState(null);
@@ -80,6 +86,9 @@ export default function Users() {
   });
 
   const [formErrors, setFormErrors] = useState({});
+
+  // 🔴 FIXED: Get current user role from AppContext
+  const currentUserRole = currentUser?.role || "Viewer";
 
   /* ===============================
      LOAD USERS (REALTIME)
@@ -103,6 +112,68 @@ export default function Users() {
     });
     return () => unsub();
   }, []);
+
+  /* ===============================
+     LOAD USER RULES (REALTIME)
+  ================================ */
+  useEffect(() => {
+    const userRulesRef = doc(db, "settings", "userRules");
+    
+    const unsub = onSnapshot(userRulesRef, (snap) => {
+      if (snap.exists()) {
+        setUserRules(snap.data());
+      } else {
+        // 🔴 DEFAULT RULES if document doesn't exist
+        const defaultRules = {
+          global: {
+            forcePasswordChange: true,
+            enable2FA: false
+          },
+          roles: {
+            Admin: {
+              allowUserCreation: true,
+              allowUserDeletion: true
+            },
+            Manager: {
+              allowUserCreation: true,
+              allowUserDeletion: false
+            },
+            Staff: {
+              allowUserCreation: false,
+              allowUserDeletion: false
+            },
+            Viewer: {
+              allowUserCreation: false,
+              allowUserDeletion: false
+            }
+          }
+        };
+        setUserRules(defaultRules);
+      }
+    }, (error) => {
+      console.error("Error loading user rules:", error);
+    });
+
+    return () => unsub();
+  }, []);
+
+  /* ===============================
+     COMPUTE PERMISSIONS BASED ON USER RULES
+  ================================ */
+  const permissions = useMemo(() => {
+    if (!userRules) return {};
+    
+    // Get permissions for current user's role
+    const rolePermissions = userRules.roles?.[currentUserRole] || {};
+    
+    return {
+      canCreateUser: rolePermissions.allowUserCreation || false,
+      canDeleteUser: rolePermissions.allowUserDeletion || false
+    };
+  }, [userRules, currentUserRole]);
+
+  // Destructure for easy use
+  const { canCreateUser, canDeleteUser } = permissions;
 
   /* ===============================
      FILTER USERS
@@ -166,6 +237,12 @@ export default function Users() {
   ================================ */
   const saveUser = async e => {
     e.preventDefault();
+    
+    // 🔴 CHECK PERMISSION: Can create user?
+    if (!editUser && !canCreateUser) {
+      alert("You do not have permission to create users.");
+      return;
+    }
     
     if (!validateForm()) {
       return;
@@ -250,6 +327,12 @@ export default function Users() {
      DELETE USER
   ================================ */
   const deleteUserHandler = async user => {
+    // 🔴 CHECK PERMISSION: Can delete user?
+    if (!canDeleteUser) {
+      alert("You do not have permission to delete users.");
+      return;
+    }
+    
     if (!window.confirm(`Are you sure you want to delete ${user.fullName}? This action cannot be undone.`)) return;
     
     try {
@@ -279,6 +362,12 @@ export default function Users() {
      MODAL HANDLERS
   ================================ */
   const openAdd = () => {
+    // 🔴 CHECK PERMISSION: Can create user?
+    if (!canCreateUser) {
+      alert("You do not have permission to create users.");
+      return;
+    }
+    
     setEditUser(null);
     setForm({
       fullName: "",
@@ -339,15 +428,19 @@ export default function Users() {
           <h1 className="text-2xl font-bold text-gray-800">User Management</h1>
           <p className="text-gray-600 mt-1">Manage user accounts, roles, and access permissions</p>
         </div>
-        <button 
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm hover:shadow-md flex items-center gap-2 w-full sm:w-auto justify-center"
-          onClick={openAdd}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add User
-        </button>
+        
+        {/* 🔴 MODIFIED: Only show Add User button if permission allows */}
+        {canCreateUser && (
+          <button 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm hover:shadow-md flex items-center gap-2 w-full sm:w-auto justify-center"
+            onClick={openAdd}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add User
+          </button>
+        )}
       </div>
 
       {/* FILTERS */}
@@ -457,62 +550,6 @@ export default function Users() {
         </div>
       </div>
 
-      {/* ROLE PERMISSIONS - MATCHING SCREENSHOT LAYOUT */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="px-5 py-4 border-b bg-gray-50">
-          <h2 className="text-lg font-semibold text-gray-800">Role Permissions</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <div className="min-w-full">
-            <div className="grid grid-cols-1 md:grid-cols-4 divide-x divide-gray-200">
-              {/* Admin Column - Purple */}
-              <div className="p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <div className="w-6 h-6 bg-purple-500 rounded-full"></div>
-                  </div>
-                  <h3 className="font-bold text-lg text-gray-900">Admin</h3>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{ROLE_PERMISSIONS.Admin}</p>
-              </div>
-              
-              {/* Manager Column - Blue */}
-              <div className="p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <div className="w-6 h-6 bg-blue-500 rounded-full"></div>
-                  </div>
-                  <h3 className="font-bold text-lg text-gray-900">Manager</h3>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{ROLE_PERMISSIONS.Manager}</p>
-              </div>
-              
-              {/* Staff Column - Green */}
-              <div className="p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <div className="w-6 h-6 bg-green-500 rounded-full"></div>
-                  </div>
-                  <h3 className="font-bold text-lg text-gray-900">Staff</h3>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{ROLE_PERMISSIONS.Staff}</p>
-              </div>
-              
-              {/* Viewer Column - Gray */}
-              <div className="p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <div className="w-6 h-6 bg-gray-500 rounded-full"></div>
-                  </div>
-                  <h3 className="font-bold text-lg text-gray-900">Viewer</h3>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{ROLE_PERMISSIONS.Viewer}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* USERS TABLE - WITH FIXED ACTIONS COLUMN */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
@@ -591,11 +628,11 @@ export default function Users() {
                       <td className="px-5 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-500">{u.lastActive}</div>
                       </td>
-                      {/* ✅ FIXED ACTIONS COLUMN */}
+                      {/* ✅ FIXED ACTIONS COLUMN WITH PERMISSION CHECKS */}
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-2 sm:justify-start min-w-[120px]">
                           
-                          {/* EDIT */}
+                          {/* EDIT - Always allowed (if you can see users, you can edit them) */}
                           <button
                             className="text-blue-600 p-2 rounded hover:bg-blue-50 transition-colors flex items-center justify-center w-8 h-8"
                             onClick={() => openEdit(u)}
@@ -611,7 +648,7 @@ export default function Users() {
                             </svg>
                           </button>
 
-                          {/* ENABLE / DISABLE */}
+                          {/* ENABLE / DISABLE - Always allowed */}
                           <button
                             className={`p-2 rounded flex items-center justify-center w-8 h-8 transition-colors ${
                               u.status === "Active"
@@ -630,24 +667,32 @@ export default function Users() {
                             </svg>
                           </button>
 
-                          {/* DELETE - FIXED */}
-                          <button
-                            className="text-red-600 p-2 rounded hover:bg-red-50 transition-colors flex items-center justify-center w-8 h-8"
-                            onClick={() => deleteUserHandler(u)}
-                            title="Delete user"
-                          >
-                            <svg 
-                              className="w-4 h-4" 
-                              fill="none" 
-                              stroke="currentColor" 
-                              viewBox="0 0 24 24"
-                              style={{ display: 'block' }}
+                          {/* DELETE - 🔴 ONLY SHOW IF PERMISSION ALLOWS */}
+                          {canDeleteUser ? (
+                            <button
+                              className="text-red-600 p-2 rounded hover:bg-red-50 transition-colors flex items-center justify-center w-8 h-8"
+                              onClick={() => deleteUserHandler(u)}
+                              title="Delete user"
                             >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21
-                                   H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                              <svg 
+                                className="w-4 h-4" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                                style={{ display: 'block' }}
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21
+                                     H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <div className="text-gray-400 p-2 cursor-not-allowed flex items-center justify-center w-8 h-8" title="You don't have permission to delete users">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                            </div>
+                          )}
 
                         </div>
                       </td>

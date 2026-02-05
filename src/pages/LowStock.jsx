@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from "react-router-dom";
 
 // ===============================
 // LOW STOCK COMPONENT
@@ -7,17 +8,8 @@ const LowStock = () => {
   // ===============================
   // STATE VARIABLES
   // ===============================
-  const [allLowStockData, setAllLowStockData] = useState([]);
-  const [filteredLowStockData, setFilteredLowStockData] = useState([]);
-  const [currentSearchTerm, setCurrentSearchTerm] = useState('');
-  const [currentWarehouseFilter, setCurrentWarehouseFilter] = useState('all');
-  const [lowStockPage, setLowStockPage] = useState(1);
-  const LOWSTOCK_PER_PAGE = 5;
-
-  // ===============================
-  // MOCK DATA (Replace with Firestore data later)
-  // ===============================
-  const mockData = useMemo(() => [
+  // Static mock data (will be replaced with Firestore later)
+  const allLowStockData = useMemo(() => [
     { sku: 'SKU-1003', product: 'Red Chili Powder', warehouse: 'Warehouse B', available: 40, min: 50 },
     { sku: 'SKU-1004', product: 'Turmeric Powder', warehouse: 'Warehouse B', available: 18, min: 50 },
     { sku: 'SKU-1011', product: 'Sugar', warehouse: 'Warehouse A', available: 22, min: 100 },
@@ -28,18 +20,19 @@ const LowStock = () => {
     { sku: 'SKU-1023', product: 'Cooking Oil', warehouse: 'Warehouse A', available: 15, min: 40 }
   ], []);
 
-  // ===============================
-  // INITIALIZE DATA
-  // ===============================
-  useEffect(() => {
-    setAllLowStockData(mockData);
-    applyLowStockFilters(mockData, '', 'all', 1);
-  }, [mockData]);
+  // User interaction states
+  const [currentSearchTerm, setCurrentSearchTerm] = useState('');
+  const [currentWarehouseFilter, setCurrentWarehouseFilter] = useState('all');
+  const [lowStockPage, setLowStockPage] = useState(1);
+  const LOWSTOCK_PER_PAGE = 5;
+  
+  // React Router navigation
+  const navigate = useNavigate();
 
   // ===============================
-  // APPLY FILTERS WITH PAGINATION
+  // APPLY FILTERS FUNCTION
   // ===============================
-  const applyLowStockFilters = (data, searchTerm, warehouseFilter, page) => {
+  const applyLowStockFilters = useMemo(() => (data, searchTerm, warehouseFilter) => {
     let filtered = [...data];
     
     // Apply search filter
@@ -59,18 +52,36 @@ const LowStock = () => {
       );
     }
     
-    setFilteredLowStockData(filtered);
-    setLowStockPage(1); // Reset to first page when filters change
-  };
+    return filtered;
+  }, []);
 
   // ===============================
-  // APPLY FILTERS WHEN SEARCH OR FILTER CHANGES
+  // DERIVED STATE (computed during render)
   // ===============================
-  useEffect(() => {
-    if (allLowStockData.length > 0) {
-      applyLowStockFilters(allLowStockData, currentSearchTerm, currentWarehouseFilter, 1);
-    }
-  }, [allLowStockData, currentSearchTerm, currentWarehouseFilter]);
+  const filteredLowStockData = useMemo(() => {
+    return applyLowStockFilters(
+      allLowStockData,
+      currentSearchTerm,
+      currentWarehouseFilter
+    );
+  }, [allLowStockData, currentSearchTerm, currentWarehouseFilter, applyLowStockFilters]);
+
+  // ===============================
+  // RESET PAGINATION WHEN FILTERS CHANGE
+  // ===============================
+  React.useEffect(() => {
+    setLowStockPage(1);
+  }, [currentSearchTerm, currentWarehouseFilter]);
+
+  // ===============================
+  // PAGINATION CALCULATIONS
+  // ===============================
+  const totalItems = filteredLowStockData.length;
+  const totalPages = Math.ceil(totalItems / LOWSTOCK_PER_PAGE);
+  const currentPage = Math.min(lowStockPage, totalPages || 1);
+  const startIndex = (currentPage - 1) * LOWSTOCK_PER_PAGE;
+  const endIndex = startIndex + LOWSTOCK_PER_PAGE;
+  const pageItems = filteredLowStockData.slice(startIndex, endIndex);
 
   // ===============================
   // RENDER LOW STOCK ROW
@@ -100,7 +111,7 @@ const LowStock = () => {
         </td>
         <td className="px-6 py-4 text-sm">
           <button
-            onClick={() => window.location.hash = '#/stockIn'}
+            onClick={() => navigate("/suppliers")}
             className="text-blue-600 hover:underline font-medium"
           >
             Add Stock
@@ -109,16 +120,6 @@ const LowStock = () => {
       </tr>
     );
   };
-
-  // ===============================
-  // PAGINATION CALCULATIONS
-  // ===============================
-  const totalItems = filteredLowStockData.length;
-  const totalPages = Math.ceil(totalItems / LOWSTOCK_PER_PAGE);
-  const currentPage = Math.min(lowStockPage, totalPages || 1);
-  const startIndex = (currentPage - 1) * LOWSTOCK_PER_PAGE;
-  const endIndex = startIndex + LOWSTOCK_PER_PAGE;
-  const pageItems = filteredLowStockData.slice(startIndex, endIndex);
 
   // ===============================
   // PAGINATION COMPONENT
@@ -224,8 +225,8 @@ const LowStock = () => {
   // REFRESH LOW STOCK DATA
   // ===============================
   const refreshLowStockTable = () => {
-    // For now, we'll just re-apply filters
-    applyLowStockFilters(allLowStockData, currentSearchTerm, currentWarehouseFilter, 1);
+    // Since we're using static data, just reset pagination
+    setLowStockPage(1);
     alert('Low stock data refreshed!');
   };
 
@@ -233,8 +234,8 @@ const LowStock = () => {
   // APPLY FILTER BUTTON HANDLER
   // ===============================
   const handleApplyFilter = () => {
-    // Already handled by useEffect, but we can keep it for UI consistency
-    applyLowStockFilters(allLowStockData, currentSearchTerm, currentWarehouseFilter, 1);
+    // Already handled by useMemo, but we can keep it for UI consistency
+    setLowStockPage(1);
   };
 
   // ===============================

@@ -1,4 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+  doc
+} from "firebase/firestore";
+import { db } from "../firebase/firebase";
+import { useApp } from "../context/AppContext";
 
 // ===============================
 // REPORT DEFINITIONS
@@ -43,6 +54,341 @@ const REPORTS = [
 ];
 
 // ===============================
+// VIEW-ONLY UI COMPONENT (WITH FIXED ALIGNMENT)
+// ===============================
+function ReportsViewOnlyUI({ reports }) {
+  const [search, setSearch] = useState("");
+  const [type, setType] = useState("");
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  // Download helper function
+  const downloadReportCSV = (report) => {
+    const headers = ["Type", ...Object.keys(report.params || {}), "Generated At"];
+    const row = [
+      report.type,
+      ...Object.values(report.params || {}),
+      report.generatedAt
+    ];
+
+    const csvContent = [
+      headers.join(","),
+      row.map(v => `"${v}"`).join(",")
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${report.type.replace(/\s+/g, "_")}_${new Date().getTime()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const filteredReports = useMemo(() => {
+    return reports.filter((r) => {
+      if (search && !r.type.toLowerCase().includes(search.toLowerCase()))
+        return false;
+
+      if (type && r.type !== type)
+        return false;
+
+      if (fromDate) {
+        const reportDate = new Date(r.generatedAt);
+        if (reportDate < new Date(fromDate)) return false;
+      }
+
+      if (toDate) {
+        const reportDate = new Date(r.generatedAt);
+        if (reportDate > new Date(toDate + "T23:59:59")) return false;
+      }
+
+      return true;
+    });
+  }, [search, type, fromDate, toDate, reports]);
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "-";
+    return dateStr;
+  };
+
+  return (
+    // 🔥 FIXED: Removed max-w-6xl and mx-auto for proper left alignment
+    <div className="min-h-full w-full px-6 md:px-10 py-6 bg-white text-gray-900">
+
+      {/* HEADER */}
+      <header className="mb-12">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-4xl font-bold tracking-tight mb-1">
+              Reports
+            </h1>
+          </div>
+          
+        </div>
+        <div className="h-1 w-40 bg-gradient-to-r from-blue-600 to-blue-400 rounded-full mt-4"></div>
+      </header>
+
+      {/* STATS CARDS (VIEW ONLY) - WITH CLICK TO FILTER */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+
+        {/* TOTAL CARD (reset filter) */}
+        <div
+          onClick={() => setType("")}
+          className={`cursor-pointer bg-gradient-to-br from-slate-50 to-slate-100 
+            border rounded-2xl p-5 transition hover:-translate-y-1
+            ${type === "" ? "ring-2 ring-slate-400" : "border-slate-200"}
+          `}
+        >
+          <div className="text-3xl font-bold text-slate-900 mb-1">
+            {filteredReports.length}
+          </div>
+          <div className="text-sm text-slate-600 font-medium">
+            Total Reports
+          </div>
+        </div>
+
+        {/* STOCK CARD */}
+        <div
+          onClick={() => setType("Stock Report")}
+          className={`cursor-pointer bg-gradient-to-br from-blue-50 to-blue-100 
+            border rounded-2xl p-5 transition hover:-translate-y-1
+            ${type === "Stock Report" ? "ring-2 ring-blue-500 border-blue-400" : "border-blue-200"}
+          `}
+        >
+          <div className="text-3xl font-bold text-blue-700 mb-1">
+            {filteredReports.filter(r => r.type === "Stock Report").length}
+          </div>
+          <div className="text-sm text-blue-600 font-medium">
+            Stock Reports
+          </div>
+        </div>
+
+        {/* INWARD / OUTWARD CARD */}
+        <div
+          onClick={() => setType("Inward/Outward Report")}
+          className={`cursor-pointer bg-gradient-to-br from-green-50 to-green-100 
+            border rounded-2xl p-5 transition hover:-translate-y-1
+            ${type === "Inward/Outward Report"
+              ? "ring-2 ring-green-500 border-green-400"
+              : "border-green-200"}
+          `}
+        >
+          <div className="text-3xl font-bold text-green-700 mb-1">
+            {filteredReports.filter(r => r.type === "Inward/Outward Report").length}
+          </div>
+          <div className="text-sm text-green-600 font-medium">
+            Inward / Outward
+          </div>
+        </div>
+
+        {/* AUDIT CARD */}
+        <div
+          onClick={() => setType("Audit Log")}
+          className={`cursor-pointer bg-gradient-to-br from-purple-50 to-purple-100 
+            border rounded-2xl p-5 transition hover:-translate-y-1
+            ${type === "Audit Log" ? "ring-2 ring-purple-500 border-purple-400" : "border-purple-200"}
+          `}
+        >
+          <div className="text-3xl font-bold text-purple-700 mb-1">
+            {filteredReports.filter(r => r.type === "Audit Log").length}
+          </div>
+          <div className="text-sm text-purple-600 font-medium">
+            Audit Logs
+          </div>
+        </div>
+
+        {/* EXPIRY CARD */}
+        <div
+          onClick={() => setType("Expiry Report")}
+          className={`cursor-pointer bg-gradient-to-br from-orange-50 to-orange-100 
+            border rounded-2xl p-5 transition hover:-translate-y-1
+            ${type === "Expiry Report" ? "ring-2 ring-orange-500 border-orange-400" : "border-orange-200"}
+          `}
+        >
+          <div className="text-3xl font-bold text-orange-700 mb-1">
+            {filteredReports.filter(r => r.type === "Expiry Report").length}
+          </div>
+          <div className="text-sm text-orange-600 font-medium">
+            Expiry Alerts
+          </div>
+        </div>
+
+        {/* LOW STOCK CARD */}
+        <div
+          onClick={() => setType("Low Stock Report")}
+          className={`cursor-pointer bg-gradient-to-br from-red-50 to-red-100 
+            border rounded-2xl p-5 transition hover:-translate-y-1
+            ${type === "Low Stock Report"
+              ? "ring-2 ring-red-500 border-red-400"
+              : "border-red-200"}
+          `}
+        >
+          <div className="text-3xl font-bold text-red-700 mb-1">
+            {filteredReports.filter(r => r.type === "Low Stock Report").length}
+          </div>
+          <div className="text-sm text-red-600 font-medium">
+            Low Stock Alerts
+          </div>
+        </div>
+
+      </div>
+
+      {/* FILTERS */}
+      <div className="mb-8">
+        <div className="flex flex-wrap gap-3">
+          <input
+            type="text"
+            placeholder="Search reports..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 px-5 py-3 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-blue-100"
+          />
+
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="px-4 py-3 bg-gray-50 border rounded-xl text-sm"
+          >
+            <option value="">All Types</option>
+            <option value="Stock Report">Stock</option>
+            <option value="Audit Log">Audit</option>
+            <option value="Expiry Report">Expiry</option>
+            <option value="Inward/Outward Report">Inward / Outward</option>
+            <option value="Low Stock Report">Low Stock</option>
+          </select>
+
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="px-4 py-3 bg-gray-50 border rounded-xl text-sm"
+            placeholder="From Date"
+          />
+
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="px-4 py-3 bg-gray-50 border rounded-xl text-sm"
+            placeholder="To Date"
+          />
+
+          <button
+            onClick={() => {
+              setSearch("");
+              setType("");
+              setFromDate("");
+              setToDate("");
+            }}
+            className="px-5 py-3 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-xl"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {/* LIST */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">All Reports</h2>
+          <span className="text-sm text-gray-500">
+            {filteredReports.length} reports
+          </span>
+        </div>
+
+        {filteredReports.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">
+            No reports found
+          </div>
+        ) : (
+          filteredReports.map((r, i) => (
+            <div
+              key={r.id || i}
+              className="bg-white border rounded-xl p-5 hover:bg-blue-50 transition-all duration-300 ease-out"
+            >
+              <div className="flex justify-between items-center gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    {r.type}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Generated at {formatDate(r.generatedAt)}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedReport(r)}
+                    className="px-4 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    View
+                  </button>
+                  <button
+                    onClick={() => downloadReportCSV(r)}
+                    className="px-4 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                  >
+                    Download
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* MODAL FOR VIEWING REPORT */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">{selectedReport.type}</h3>
+              <button onClick={() => setSelectedReport(null)} className="text-xl">&times;</button>
+            </div>
+
+            <p className="text-sm text-gray-500 mb-3">
+              Generated at {selectedReport.generatedAt}
+            </p>
+
+            <div className="space-y-2 text-sm">
+              {Object.entries(selectedReport.params || {}).map(([k, v]) => (
+                <div key={k}>
+                  <span className="font-medium">{k}:</span> {v}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button 
+                onClick={() => setSelectedReport(null)}
+                className="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => downloadReportCSV(selectedReport)}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <footer className="mt-12 pt-6 border-t text-center text-sm text-gray-500">
+        
+      </footer>
+    </div>
+  );
+}
+
+// ===============================
 // MAIN REPORTS COMPONENT
 // ===============================
 export default function Reports() {
@@ -51,25 +397,116 @@ export default function Reports() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({});
 
-  // Real-time data stores (you can replace these with actual Firebase data)
+  // 🔴 MODIFIED: Use AppContext instead of local state
+  const { user, userRules } = useApp();
+  
+  // 🔴 REMOVED: Local userRules state - use AppContext instead
+  const [enabledReports, setEnabledReports] = useState({});
+  
+  // Real-time data stores
   const [liveCategories] = useState(['All', 'Electronics', 'Food', 'Clothing', 'Books', 'Toys']);
   const [liveWarehouses] = useState(['All', 'Main Warehouse', 'East Warehouse', 'West Warehouse', 'North Storage']);
+  
+  // ✅ Use current user from AppContext
+  const currentRole = user?.role || "Staff";
 
-  // Load reports from localStorage on component mount
-  useEffect(() => {
-    const savedReports = localStorage.getItem('generatedReports');
-    if (savedReports) {
-      setGeneratedReports(JSON.parse(savedReports));
-    }
+  // 🔴 MODIFIED: Get permissions from AppContext userRules
+  const canGenerate = userRules[currentRole]?.allowReportGeneration === true;
+  const canView = userRules[currentRole]?.allowReportViewing === true;
+
+  // ❌ DELETED: Debug console.log useEffect (entire block removed)
+
+  // Calculate date defaults once using useMemo
+  const dateDefaults = useMemo(() => {
+    const today = new Date();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    
+    return {
+      today: today.toISOString().split('T')[0],
+      sevenDaysAgo: sevenDaysAgo.toISOString().split('T')[0]
+    };
   }, []);
 
-  // Save reports to localStorage whenever they change
+  // 🔴 MODIFIED: Only load enabledReports from Firestore (userRules now from AppContext)
   useEffect(() => {
-    localStorage.setItem('generatedReports', JSON.stringify(generatedReports));
-  }, [generatedReports]);
+    const unsubReports = onSnapshot(
+      doc(db, "settings", "reports"),
+      (snap) => {
+        if (snap.exists()) {
+          setEnabledReports(snap.data().enabledReports || {});
+          // ❌ OPTIONAL: Remove console.log for production (commented out)
+          // console.log("✅ Report Settings Loaded:", snap.data().enabledReports);
+        }
+      },
+      (error) => {
+        console.error("Error loading report settings:", error);
+      }
+    );
+
+    return () => {
+      unsubReports();
+    };
+  }, []);
 
   // ===============================
-  // FORM CONFIGURATION
+  // REAL-TIME FIRESTORE DATA FETCHING
+  // ===============================
+  useEffect(() => {
+    const q = query(
+      collection(db, "reports"),
+      orderBy("generatedAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const reportsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          type: doc.data().type,
+          params: doc.data().params || {},
+          generatedAt: doc.data().generatedAt?.toDate().toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }));
+
+        setGeneratedReports(reportsData);
+      },
+      (error) => {
+        console.error("Error fetching reports:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // 🔴 ADDED: PERMISSION-BASED RENDERING
+  // 🚫 No access at all
+  if (!canGenerate && !canView) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] text-gray-500">
+        <div className="text-5xl mb-4">🚫</div>
+        <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+        <p className="mb-4">You do not have access to Reports module</p>
+        <div className="text-sm bg-gray-100 p-3 rounded-lg mb-6">
+          <p><strong>Role:</strong> {currentRole}</p>
+          <p><strong>Can Generate:</strong> {canGenerate ? '✅ Yes' : '❌ No'}</p>
+          <p><strong>Can View:</strong> {canView ? '✅ Yes' : '❌ No'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 👀 VIEW ONLY MODE
+  if (!canGenerate && canView) {
+    return <ReportsViewOnlyUI reports={generatedReports} />;
+  }
+
+  // ===============================
+  // FORM CONFIGURATION (ONLY FOR FULL MODE)
   // ===============================
   const REPORT_FORM_CONFIG = {
     'Stock Report': () => (
@@ -129,13 +566,12 @@ export default function Reports() {
   };
 
   // ===============================
-  // INPUT COMPONENTS
+  // INPUT COMPONENTS (ONLY FOR FULL MODE)
   // ===============================
   const dateInput = (label, name) => {
-    const today = new Date().toISOString().split('T')[0];
-    const defaultValue = name === 'fromDate'
-      ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-      : today;
+    const defaultValue = name === 'fromDate' 
+      ? dateDefaults.sevenDaysAgo 
+      : dateDefaults.today;
 
     return (
       <div className="mb-4">
@@ -204,9 +640,13 @@ export default function Reports() {
   );
 
   // ===============================
-  // MODAL FUNCTIONS
+  // MODAL FUNCTIONS (ONLY FOR FULL MODE)
   // ===============================
   const openReportModal = (reportType) => {
+    if (!canGenerate) {
+      alert("You don't have permission to generate reports");
+      return;
+    }
     setCurrentReportType(reportType);
     setFormData({});
     setShowModal(true);
@@ -219,17 +659,21 @@ export default function Reports() {
   };
 
   // ===============================
-  // FORM SUBMISSION HANDLER
+  // FORM SUBMISSION HANDLER (FIRESTORE) - ONLY FOR FULL MODE
   // ===============================
-  const handleReportSubmit = (e) => {
+  const handleReportSubmit = async (e) => {
     e.preventDefault();
+
+    if (!canGenerate) {
+      alert("You don't have permission to generate reports");
+      return;
+    }
 
     if (!currentReportType) {
       alert('No report type selected');
       return;
     }
 
-    // Collect all form data
     const form = e.target;
     const formDataObj = new FormData(form);
     const params = {};
@@ -238,270 +682,82 @@ export default function Reports() {
       params[key] = value;
     }
 
-    // Add checkboxes that might not be in formDataObj
     Object.keys(formData).forEach(key => {
       if (formData[key] === true && !params[key]) {
         params[key] = 'Yes';
       }
     });
 
-    // Create new report object
-    const newReport = {
-      type: currentReportType,
-      ...params,
-      generatedAt: new Date().toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    };
+    try {
+      await addDoc(collection(db, "reports"), {
+        type: currentReportType,
+        params: params,
+        generatedAt: serverTimestamp(),
+        generatedBy: user?.role || "Unknown",
+        size: "Auto"
+      });
 
-    // Add to generated reports (at beginning)
-    setGeneratedReports(prev => [newReport, ...prev]);
+      closeReportModal();
 
-    // Close modal
-    closeReportModal();
+      setTimeout(() => {
+        alert(`✅ ${currentReportType} generated successfully!`);
+      }, 100);
 
-    // Show success message
-    setTimeout(() => {
-      alert(`✅ ${currentReportType} generated successfully!`);
-    }, 100);
-  };
-
-  // ===============================
-  // DOWNLOAD FUNCTIONS
-  // ===============================
-  const downloadCSV = (index) => {
-    const report = generatedReports[index];
-
-    // Create CSV content
-    const headers = Object.keys(report);
-    const row = headers.map(key => report[key]);
-
-    const csvContent = [
-      headers.join(','),
-      row.map(value => `"${value}"`).join(',')
-    ].join('\n');
-
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${report.type.replace(/\s+/g, '_')}_${new Date().getTime()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    alert(`📥 ${report.type} downloaded as CSV!`);
-  };
-
-  const downloadPDF = (index) => {
-    const report = generatedReports[index];
-
-    // Open print dialog with formatted content
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>${report.type}</title>
-        <style>
-          body { 
-            font-family: Arial, sans-serif; 
-            padding: 30px; 
-            margin: 0;
-          }
-          h1 { 
-            color: #333; 
-            border-bottom: 2px solid #4F46E5; 
-            padding-bottom: 10px; 
-            margin-bottom: 20px; 
-          }
-          .report-info { 
-            margin-bottom: 30px; 
-          }
-          .info-item { 
-            margin-bottom: 8px; 
-            padding: 5px 0;
-          }
-          .info-label { 
-            font-weight: bold; 
-            color: #555; 
-            display: inline-block; 
-            width: 150px; 
-          }
-          .info-value { 
-            color: #333; 
-          }
-          .footer { 
-            margin-top: 40px; 
-            padding-top: 20px; 
-            border-top: 1px solid #ddd; 
-            font-size: 12px; 
-            color: #666; 
-            text-align: center; 
-          }
-          @media print {
-            body { 
-              padding: 20px; 
-              font-size: 12pt;
-            }
-            button { 
-              display: none; 
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <h1>${report.type}</h1>
-        
-        <div class="report-info">
-          ${Object.entries(report)
-        .map(([key, value]) => `
-              <div class="info-item">
-                <span class="info-label">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</span>
-                <span class="info-value">${value}</span>
-              </div>
-            `).join('')}
-        </div>
-        
-        <div class="footer">
-          Generated by WarehouseHub Inventory System • ${new Date().toLocaleDateString()}
-        </div>
-        
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-              setTimeout(() => window.close(), 100);
-            }, 500);
-          };
-        </script>
-      </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-  };
-
-  // ===============================
-  // RENDER FUNCTIONS
-  // ===============================
-  const renderReportsTable = () => {
-    if (generatedReports.length === 0) {
-      return (
-        <div className="text-center py-8">
-          <p className="text-gray-500">
-            No reports generated yet. Generate a report to see it here.
-          </p>
-        </div>
-      );
+    } catch (error) {
+      console.error("Error saving report to Firestore:", error);
+      alert("❌ Failed to save report. Please try again.");
     }
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Report
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Parameters
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Generated At
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {generatedReports.map((report, index) => (
-              <tr key={index} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900">{report.type}</div>
-                </td>
-                <td className="px-4 py-3 text-gray-600">
-                  <div className="text-xs space-y-1">
-                    {Object.entries(report)
-                      .filter(([key]) => !['type', 'generatedAt'].includes(key))
-                      .map(([key, value]) => (
-                        <div key={key}>
-                          {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:
-                          <span className="font-medium ml-1">{value}</span>
-                        </div>
-                      ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-gray-600">{report.generatedAt}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => downloadCSV(index)}
-                      className="px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded text-xs font-medium transition-colors"
-                    >
-                      CSV
-                    </button>
-                    <button
-                      onClick={() => downloadPDF(index)}
-                      className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs font-medium transition-colors"
-                    >
-                      PDF
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
   };
 
   // ===============================
-  // MAIN RENDER
+  // ✍️ FULL MODE (ADMIN/MANAGER)
   // ===============================
   return (
     <div className="max-w-7xl mx-auto space-y-8 pr-4 md:pr-6 pb-4 md:pb-6">
-      <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
-
-      {/* 6 REPORT CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {REPORTS.map((report) => (
-          <div
-            key={report.title}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition"
-          >
-            <div className={`${report.color} text-white p-5`}>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{report.icon}</span>
-                <span className="text-lg font-semibold">{report.title}</span>
-              </div>
-            </div>
-            <div className="p-5">
-              <p className="text-gray-600 mb-5">{report.description}</p>
-              <button
-                onClick={() => openReportModal(report.title)}
-                className={`w-full py-2.5 ${report.color} hover:opacity-90 text-white rounded-lg font-medium transition`}
-              >
-                Generate Report
-              </button>
-            </div>
-          </div>
-        ))}
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
       </div>
 
-      {/* GENERATED REPORTS TABLE */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Generated Reports</h2>
-        {renderReportsTable()}
+      {/* 6 REPORT CARDS - FILTERED BASED ON SETTINGS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {REPORTS
+          .filter((report) => {
+            if (report.title === "Stock Report") return enabledReports.stock !== false;
+            if (report.title === "Inward/Outward Report") return enabledReports.inwardOutward !== false;
+            if (report.title === "Expiry Report") return enabledReports.expiry !== false;
+            if (report.title === "Low Stock Report") return enabledReports.lowStock !== false;
+            if (report.title === "Stock Valuation") return enabledReports.valuation !== false;
+            if (report.title === "Audit Log") return enabledReports.audit !== false;
+            return true;
+          })
+          .map((report) => (
+            <div
+              key={report.title}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition"
+            >
+              <div className={`${report.color} text-white p-5`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{report.icon}</span>
+                  <span className="text-lg font-semibold">{report.title}</span>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-gray-600 mb-5">{report.description}</p>
+                {canGenerate ? (
+                  <button
+                    onClick={() => openReportModal(report.title)}
+                    className={`w-full py-2.5 ${report.color} hover:opacity-90 text-white rounded-lg font-medium transition`}
+                  >
+                    Generate Report
+                  </button>
+                ) : (
+                  <div className="text-center py-2.5 bg-gray-100 text-gray-500 rounded-lg font-medium">
+                    Cannot Generate (No Permission)
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
       </div>
 
       {/* MODAL */}

@@ -1,14 +1,27 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase/firebase";
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
+  // ===============================
+  // USER AUTH STATE
+  // ===============================
   const [user, setUser] = useState(() => {
-    // Load user from localStorage on initial render
     const savedUser = localStorage.getItem("currentUser");
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
+  // ===============================
+  // 🔴 USER RULES (GLOBAL PERMISSIONS)
+  // ===============================
+  const [userRules, setUserRules] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  // ===============================
+  // AUTH METHODS
+  // ===============================
   const login = (userData) => {
     setUser(userData);
     localStorage.setItem("currentUser", JSON.stringify(userData));
@@ -20,8 +33,41 @@ export function AppProvider({ children }) {
     localStorage.removeItem("currentUserId");
   };
 
+  // ===============================
+  // 🔴 REAL-TIME FIRESTORE SYNC
+  // ===============================
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "settings", "userRules"),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data().roles || {};
+          setUserRules(data);
+          // Store in localStorage for Sidebar access
+          localStorage.setItem('userRules', JSON.stringify(data));
+          console.log("✅ AppContext → UserRules loaded", data);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("❌ Failed to load userRules:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
   return (
-    <AppContext.Provider value={{ user, login, logout }}>
+    <AppContext.Provider
+      value={{
+        user,
+        userRules,   // 🔑 VERY IMPORTANT
+        login,
+        logout,
+        loading
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

@@ -10,7 +10,7 @@ import {
   updateDoc,
   Timestamp
 } from "firebase/firestore";
-import { db } from '../firebase/firebase'; // Adjust import path as needed
+import { db, auth } from '../firebase/firebase'; // Adjust import path as needed
 
 // ===============================
 // SUPPLIERS COMPONENT
@@ -37,7 +37,6 @@ const Suppliers = () => {
   const [showPODetailsModal, setShowPODetailsModal] = useState(false);
   
   // Form States
-  const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [viewSupplierData, setViewSupplierData] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
   
@@ -75,6 +74,27 @@ const Suppliers = () => {
     setTimeout(() => {
       setToast({ show: false, message: '', type: 'success' });
     }, 3000);
+  }, []);
+
+  // ===============================
+  // AUDIT LOGGER (INLINE - NO NEW FILE)
+  // ===============================
+  const addAuditLog = useCallback(async ({ action, module, description }) => {
+    try {
+      const userEmail = auth.currentUser?.email || "unknown-user";
+
+      await addDoc(collection(db, "auditLogs"), {
+        user: userEmail,
+        action,
+        module,
+        description,
+        createdAt: Timestamp.now()
+      });
+      
+      console.log(`✅ Audit log added: ${action} - ${module}`);
+    } catch (err) {
+      console.error("❌ Audit log failed:", err);
+    }
   }, []);
 
   // ===============================
@@ -248,9 +268,20 @@ const Suppliers = () => {
     setPoItems([]);
   };
 
-  const openPOHistory = () => {
+  const openPOHistory = async () => {
     setShowPOHistoryModal(true);
     loadPOHistory();
+    
+    // Audit log for viewing PO history
+    try {
+      await addAuditLog({
+        action: "VIEW",
+        module: "Purchase Orders",
+        description: "Opened PO history"
+      });
+    } catch (err) {
+      console.error("Audit log error:", err);
+    }
   };
 
   const closePOHistory = () => {
@@ -366,6 +397,13 @@ const Suppliers = () => {
         createdAt: Timestamp.now()
       });
       
+      // AUDIT LOG: Supplier added
+      await addAuditLog({
+        action: "CREATE",
+        module: "Suppliers",
+        description: `Supplier "${name}" added`
+      });
+      
       // Success
       closeAddSupplierModal();
       showToast(`Supplier "${name}" added successfully!`, "success");
@@ -473,6 +511,13 @@ const Suppliers = () => {
         updatedAt: Timestamp.now()
       });
       
+      // AUDIT LOG: PO created
+      await addAuditLog({
+        action: "CREATE_PO",
+        module: "Purchase Orders",
+        description: `PO created for supplier "${currentPO.supplierName}" with ${validItems.length} items (Total: ₹${poTotals.total.toFixed(2)})`
+      });
+      
       // Success
       closeCreatePOModal();
       showToast(`Purchase Order created for ${currentPO.supplierName}`, "success");
@@ -495,6 +540,14 @@ const Suppliers = () => {
         status: "completed",
         updatedAt: Timestamp.now()
       });
+      
+      // AUDIT LOG: PO marked as completed
+      await addAuditLog({
+        action: "UPDATE_PO",
+        module: "Purchase Orders",
+        description: `PO marked as completed (PO ID: ${poId})`
+      });
+      
       showToast("PO marked as completed", "success");
     } catch (error) {
       console.error("Error updating PO:", error);
